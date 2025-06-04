@@ -1,4 +1,5 @@
 ﻿using Application.Interfaces;
+using AutoMapper;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore.Storage;
 using System;
@@ -13,16 +14,20 @@ namespace Infrastructure.Repositories
     public class UnitOfWork:IUnitOfWork
     {
         private readonly AppDbContext _context;
+        private readonly IMapper _mapper;
         private readonly Dictionary<Type, object> _repositories = new();
         private IDbContextTransaction? _transaction;
 
-        public UnitOfWork(AppDbContext context) => _context = context;
+        public UnitOfWork(AppDbContext context,IMapper mapper){
+            _context = context;
+            _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+        }
 
         public IRepository<T> Repository<T>() where T : class
         {
             var type = typeof(T);
             if (!_repositories.ContainsKey(type))
-                _repositories[type] = new Repository<T>(_context);
+                _repositories[type] = new Repository<T>(_context,_mapper);
 
             return (IRepository<T>)_repositories[type];
         }

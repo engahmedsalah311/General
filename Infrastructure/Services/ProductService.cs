@@ -3,6 +3,7 @@ using Application.Interfaces;
 using Application.Parameters;
 using Application.Wrapper;
 using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
@@ -16,11 +17,11 @@ namespace Infrastructure.Services
         {
         }
 
-        public async Task<Result<IEnumerable<ProductDto>>> GetAvailableProductsAsync()
+        public async Task<Result<IEnumerable<ProductDto>>> GetAvailableProductsAsync() 
         {
             try
             {
-                var products = await _repository.GetAllQueryable()
+                var products = await _repository.GetAllAsQueryable()
                     .Where(p => p.IsAvailable && p.StockQuantity > 0)
                     .ToListAsync();
 
@@ -37,7 +38,7 @@ namespace Infrastructure.Services
         {
             try
             {
-                var products = await _repository.GetAllQueryable()
+                var products = await _repository.GetAllAsQueryable()
                     .Where(p => p.CategoryId == category)
                     .ToListAsync();
 
@@ -54,7 +55,7 @@ namespace Infrastructure.Services
         {
             try
             {
-                var products = await _repository.GetAllQueryable()
+                var products = await _repository.GetAllAsQueryable()
                     .Where(p => p.Price >= minPrice && p.Price <= maxPrice)
                     .ToListAsync();
 
@@ -85,22 +86,21 @@ namespace Infrastructure.Services
             };
 
             var (data, totalCount) = await _unitOfWork.Repository<Product>()
-                .GetPagedAsync(parameters.PageNumber,parameters.PageSize,filters,includes);
-
-            var mapped = _mapper.Map<IEnumerable<ProductDto>>(data);
+                .GetPagedMappedAsync<ProductDto>(parameters.PageNumber,parameters.PageSize,filters,includes);
 
             var result = new Pagination<ProductDto>
             {
                 PageNumber = parameters.PageNumber,
                 PageSize = parameters.PageSize,
                 TotalCount = totalCount,
-                Data = mapped
+                Data = data
             };
 
             return Result<Pagination<ProductDto>>.SuccessResult(
                 result,
-                mapped.Any() ? "DataHasBeenReturnedSuccessfully" : "ThereAreNoData");
+                data.Any() ? "DataHasBeenReturnedSuccessfully" : "ThereAreNoData");
         }
+
 
 
     }

@@ -27,7 +27,7 @@ namespace Infrastructure.Services
         {
             try
             {
-                var entities = await _repository.GetAllAsync();
+                var entities = await _repository.GetAllAsList();
                 var dtos = _mapper.Map<IEnumerable<TDto>>(entities);
                 return Result<IEnumerable<TDto>>.SuccessResult(dtos);
             }
