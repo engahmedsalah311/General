@@ -7,6 +7,7 @@ using AutoMapper.QueryableExtensions;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Infrastructure.Services
 {
@@ -75,11 +76,11 @@ namespace Infrastructure.Services
             if (!string.IsNullOrEmpty(parameters.Name))
                 filters.Add(p => p.Name.Contains(parameters.Name));
 
-            if (!string.IsNullOrEmpty(parameters.Brand))
-                filters.Add(p => p.Name.Contains(parameters.Brand));
+            if (!string.IsNullOrEmpty(parameters.Description))
+                filters.Add(p => p.Name.Contains(parameters.Description));
 
-            if (parameters.MaxPrice.HasValue)
-                filters.Add(p => p.Price <= parameters.MaxPrice.Value);
+            //if (parameters..HasValue)
+            //    filters.Add(p => p.Price <= parameters.MaxPrice.Value);
             var includes = new List<Expression<Func<Product, object>>>
             {
                 p => p.Category
@@ -99,6 +100,61 @@ namespace Infrastructure.Services
             return Result<Pagination<ProductDto>>.SuccessResult(
                 result,
                 data.Any() ? "DataHasBeenReturnedSuccessfully" : "ThereAreNoData");
+        }
+
+        public async Task<IEnumerable<Product>> SearchProductsAsync(SearchProductParameters dto)
+        {
+            return await _unitOfWork.Repository<Product>().SearchAsync<SearchProductParameters>(dto);
+        }
+
+        public async Task<Result<Pagination<Product>>> SearchAsyncProductsPaged(SearchProductParameters parameters)
+        {
+            var (data, totalCount) = await _repository.SearchPagedAsync<SearchProductParameters>(
+                                    parameters,
+                                    page: 1,
+                                    pageSize: 10,
+                                    includes: new List<Expression<Func<Product, object>>> {
+                                        //x => x.Category,
+                                        x=>x.Category.Department
+                                    });
+
+            var result = new Pagination<Product>
+            {
+                PageNumber = parameters.PageNumber,
+                PageSize = parameters.PageSize,
+                TotalCount = totalCount,
+                Data = data
+            };
+
+            return Result<Pagination<Product>>.SuccessResult(
+            result,
+                data.Any() ? "DataHasBeenReturnedSuccessfully" : "ThereAreNoData");
+
+        }
+
+        public async Task<Result<Pagination<ProductDto>>> SearchAsyncProductsPagedMapped(SearchProductParameters parameters)
+        {
+            var (data, totalCount) = await _repository.SearchPagedMappedAsync<ProductDto, SearchProductParameters>(
+                                    parameters,
+                                    page: 1,
+                                    pageSize: 10,
+                                    includes: new List<Expression<Func<Product, object>>> {
+                                        x => x.Category,
+                                        x=>x.Category.Department
+                                    });
+
+            var result = new Pagination<ProductDto>
+            {
+                PageNumber = parameters.PageNumber,
+                PageSize = parameters.PageSize,
+                TotalCount = totalCount,
+                Data = data
+            };
+
+            return Result<Pagination<ProductDto>>.SuccessResult(
+            result,
+                data.Any() ? "DataHasBeenReturnedSuccessfully" : "ThereAreNoData");
+
         }
 
 

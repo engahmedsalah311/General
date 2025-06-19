@@ -41,5 +41,19 @@ namespace Application.Interfaces
         Task<IEnumerable<TEntity>> FindByIncAsync<TDto>(
                            List<Expression<Func<TEntity, bool>>>? filters = null,
                            List<Expression<Func<TEntity, object>>>? includes = null);
+
+        Task<IEnumerable<TEntity>> SearchAsync<TSearchDto>(TSearchDto searchDto, List<Expression<Func<TEntity, object>>>? includes = null);
+
+        Task<(IEnumerable<TDto> Data, int TotalCount)> SearchPagedMappedAsync<TDto, TSearchDto>(
+                           TSearchDto searchDto,
+                           int page,
+                           int pageSize,
+                           List<Expression<Func<TEntity, object>>>? includes = null);
+
+        Task<(IEnumerable<TEntity> Data, int TotalCount)> SearchPagedAsync<TSearchDto>(
+                           TSearchDto searchDto,
+                           int page,
+                           int pageSize,
+                           List<Expression<Func<TEntity, object>>>? includes = null);
     }
 }

@@ -21,7 +21,7 @@ namespace General.Controllers
         [HttpPost("Search")]
         public async Task<IActionResult> Search(SearchProductParameters parameters)
         {
-            var result = await _productService.Search(parameters);
+            var result = await _productService.SearchAsyncProductsPagedMapped(parameters);
             return Ok(result);
         }
         [HttpGet]

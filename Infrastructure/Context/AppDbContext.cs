@@ -39,5 +39,6 @@ namespace Infrastructure.Context
 
         public DbSet<Product> Products { get; set; }
         public DbSet<Category> Categorys { get; set; }
+        public DbSet<Department> departments { get; set; }
     }
 }

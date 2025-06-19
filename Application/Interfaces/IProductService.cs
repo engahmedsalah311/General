@@ -17,5 +17,8 @@ namespace Application.Interfaces
         Task<Result<IEnumerable<ProductDto>>> GetProductsByCategoryAsync(int category);
         Task<Result<IEnumerable<ProductDto>>> GetProductsInPriceRangeAsync(decimal minPrice, decimal maxPrice);
         Task<Result<Pagination<ProductDto>>> Search(SearchProductParameters parameters);
+        Task<IEnumerable<Product>> SearchProductsAsync(SearchProductParameters dto);
+        Task<Result<Pagination<Product>>> SearchAsyncProductsPaged(SearchProductParameters parameters);
+        Task<Result<Pagination<ProductDto>>> SearchAsyncProductsPagedMapped(SearchProductParameters parameters);
     }
 }
