@@ -68,9 +68,6 @@ namespace Infrastructure.Repositories
         }
 
 
-
-
-
         #region advanced search
         public async Task<IEnumerable<T>> SearchAsync<TSearchDto>(TSearchDto searchDto, List<Expression<Func<T, object>>>? includes = null)
         {
@@ -246,27 +243,9 @@ namespace Infrastructure.Repositories
                            List<Expression<Func<T, bool>>>? filters = null,
                            List<Expression<Func<T, object>>>? includes = null)
         {
-            IQueryable<T> query = _dbSet.AsNoTracking().AsQueryable();
 
-            // Apply filters
-            if (filters != null)
-            {
-                foreach (var filter in filters)
-                {
-                    query = query.Where(filter);
-                }
-            }
-
-            //apply includes
-            if (includes != null)
-            {
-                foreach (var include in includes)
-                    query = query.Include(include);
-            }
-
-
+            IQueryable<T> query = await OrdinarySearch(filters, includes);
             var totalCount = await query.CountAsync();
-
             var data = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize).ToListAsync();
@@ -278,24 +257,7 @@ namespace Infrastructure.Repositories
                            List<Expression<Func<T, bool>>>? filters = null,
                            List<Expression<Func<T, object>>>? includes = null)
         {
-            IQueryable<T> query = _dbSet.AsNoTracking().AsQueryable();
-
-            // Apply filters
-            if (filters != null)
-            {
-                foreach (var filter in filters)
-                {
-                    query = query.Where(filter);
-                }
-            }
-
-            //apply includes
-            if (includes != null)
-            {
-                foreach (var include in includes)
-                    query = query.Include(include);
-            }
-
+            IQueryable<T> query = await OrdinarySearch(filters, includes);
             var data = await query.ProjectTo<TDto>(_mapper.ConfigurationProvider).ToListAsync();
 
             return (data);
@@ -306,23 +268,7 @@ namespace Infrastructure.Repositories
                            List<Expression<Func<T, bool>>>? filters = null,
                            List<Expression<Func<T, object>>>? includes = null)
         {
-            IQueryable<T> query = _dbSet.AsQueryable();
-
-            // Apply filters
-            if (filters != null)
-            {
-                foreach (var filter in filters)
-                {
-                    query = query.Where(filter);
-                }
-            }
-
-            //apply includes
-            if (includes != null)
-            {
-                foreach (var include in includes)
-                    query = query.Include(include);
-            }
+            IQueryable<T> query = await OrdinarySearch(filters, includes);
 
             var data = await query.ToListAsync();
 
@@ -330,6 +276,17 @@ namespace Infrastructure.Repositories
         }
 
         public async Task<T?> FirstOrDefaultIncAsync<TDto>(
+                           List<Expression<Func<T, bool>>>? filters = null,
+                           List<Expression<Func<T, object>>>? includes = null)
+        {
+            IQueryable<T> query = await OrdinarySearch(filters, includes);
+
+            var data = await query.FirstOrDefaultAsync();
+
+            return (data);
+        }
+
+        private async Task<IQueryable<T>> OrdinarySearch(
                            List<Expression<Func<T, bool>>>? filters = null,
                            List<Expression<Func<T, object>>>? includes = null)
         {
@@ -350,10 +307,7 @@ namespace Infrastructure.Repositories
                 foreach (var include in includes)
                     query = query.Include(include);
             }
-
-            var data = await query.FirstOrDefaultAsync();
-
-            return (data);
+            return query;
         }
 
         #endregion
@@ -364,7 +318,7 @@ namespace Infrastructure.Repositories
 
 
 
-        
+
 
 
     }
