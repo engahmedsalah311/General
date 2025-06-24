@@ -33,6 +33,15 @@ dotnet run --project CodeGenerator Product
 
 This will generate all the necessary files for a `Product` entity.
 
+
+## New feature
+2. Run the generator on context check entity exist in context but has no implementation:
+```bash
+dotnet run --project CodeGenerator context
+```
+
+
+
 ## Configuration
 
 The generator uses `appsettings.json` for configuration. You can modify the following settings:

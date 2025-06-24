@@ -32,10 +32,36 @@ namespace CodeGenerator
             return settings;
         }
 
-        public static void GenerateFiles(string entityName)
+
+        public static void GenerateFilesFromContext()
+        {
+            var contextPath = Path.Combine(Directory.GetCurrentDirectory(), "Infrastructure", "Context", "AppDbContext.cs");
+
+            if (!File.Exists(contextPath))
+            {
+                Console.WriteLine($"AppDbContext.cs not found at path: {contextPath}");
+                return;
+            }
+
+            var fileContent = File.ReadAllText(contextPath);
+            string pattern = @"DbSet<\s*(\w+)\s*>\s+(\w+)\s*{";
+
+            var matches = Regex.Matches(fileContent, pattern);
+
+            foreach (Match match in matches)
+            {
+                string entityName = match.Groups[1].Value;
+                string propertyName = match.Groups[2].Value;
+                GenerateFiles(entityName, true);
+                UpdateServiceRegistration(entityName);
+                Console.WriteLine($"DbSet<{entityName}>: {propertyName}");
+            }
+
+        }
+        public static void GenerateFiles(string entityName,bool isContext = false)
         {
             // Generate Entity
-            GenerateEntity(entityName);
+            if(!isContext) GenerateEntity(entityName);
             
             // Generate Service Interface
             GenerateIService(entityName);
@@ -52,6 +78,8 @@ namespace CodeGenerator
 
         private static void GenerateEntity(string entityName)
         {
+
+
             var template = $@"
 using System;
 using Domain.Entities;
@@ -81,8 +109,12 @@ namespace Application.Interfaces
     {{
     }}
 }}";
-
-            SaveFile(settings?.TemplateSettings.Templates["IService"], $"I{entityName}Service", template);
+            var path = Path.Combine(settings?.TemplateSettings.Templates["IService"], $"I{entityName}Service.cs");
+            if (!File.Exists(path))
+            {
+                SaveFile(settings?.TemplateSettings.Templates["IService"], $"I{entityName}Service", template);
+            }
+            
         }
 
         private static void GenerateService(string entityName)
@@ -113,7 +145,12 @@ namespace Infrastructure.Services
     }}
 }}";
 
-            SaveFile(settings?.TemplateSettings.Templates["Service"], $"{entityName}Service", template);
+            var path = Path.Combine(settings?.TemplateSettings.Templates["Service"], $"{entityName}Service.cs");
+            if (!File.Exists(path))
+            {
+                SaveFile(settings?.TemplateSettings.Templates["Service"], $"{entityName}Service", template);
+            }
+            
         }
 
         private static void GenerateDto(string entityName)
@@ -128,7 +165,12 @@ namespace Application.DTOs
     }}
 }}";
 
-            SaveFile(settings?.TemplateSettings.Templates["Dto"], $"{entityName}Dto", template);
+            var path = Path.Combine(settings?.TemplateSettings.Templates["Dto"], $"{entityName}Dto.cs");
+            if (!File.Exists(path))
+            {
+                SaveFile(settings?.TemplateSettings.Templates["Dto"], $"{entityName}Dto", template);
+            }
+            
         }
 
         public static void UpdateServiceRegistration(string entityName)
@@ -199,7 +241,7 @@ namespace Application.DTOs
                 Console.WriteLine($"Added service registration for {entityName}");
 
                 // Update AppDbContext
-                UpdateAppDbContext(entityName);
+                //UpdateAppDbContext(entityName);
             }
             catch (Exception ex)
             {

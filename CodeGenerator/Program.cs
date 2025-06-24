@@ -14,7 +14,6 @@ namespace CodeGenerator
                 Console.WriteLine("Please provide an entity name.");
                 return;
             }
-
             var settings = Generator.LoadSettings();
             if (settings == null)
             {
@@ -23,9 +22,18 @@ namespace CodeGenerator
             }
 
             var entityName = args[0];
-            Generator.GenerateFiles(entityName);
-            Generator.UpdateServiceRegistration(entityName);
-            Generator.UpdateAppDbContext(entityName);
+            if(entityName.Contains("context"))
+            {
+                Console.WriteLine("in context");
+                Generator.GenerateFilesFromContext();
+                return;
+            }
+            else
+            {
+                Generator.GenerateFiles(entityName);
+                Generator.UpdateServiceRegistration(entityName);
+                Generator.UpdateAppDbContext(entityName);
+            }
         }
     }
 
