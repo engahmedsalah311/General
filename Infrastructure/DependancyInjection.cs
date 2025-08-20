@@ -1,8 +1,8 @@
 using Application.DTOs;
 using Application.Interfaces;
+using Application.Services;
 using Domain.Entities;
 using Infrastructure.Repositories;
-using Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;

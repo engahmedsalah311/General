@@ -5,10 +5,9 @@ using Application.Parameters;
 using Application.Wrapper;
 using AutoMapper;
 using Domain.Entities;
-using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
-namespace Infrastructure.Services
+namespace Application.Services
 {
     public class CategoryService : GenericService<Category, CategoryDto>, ICategoryService
     {

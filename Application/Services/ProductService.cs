@@ -3,13 +3,10 @@ using Application.Interfaces;
 using Application.Parameters;
 using Application.Wrapper;
 using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using Domain.Entities;
-using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
-namespace Infrastructure.Services
+namespace Application.Services
 {
     public class ProductService : GenericService<Product, ProductDto>, IProductService
     {
@@ -22,9 +19,8 @@ namespace Infrastructure.Services
         {
             try
             {
-                var products = await _repository.GetAllAsQueryable()
-                    .Where(p => p.IsAvailable && p.StockQuantity > 0)
-                    .ToListAsync();
+                var products =  _repository.GetAllAsQueryable()
+                    .Where(p => p.IsAvailable && p.StockQuantity > 0).ToList();
 
                 var dtos = _mapper.Map<IEnumerable<ProductDto>>(products);
                 return Result<IEnumerable<ProductDto>>.SuccessResult(dtos);
@@ -39,9 +35,8 @@ namespace Infrastructure.Services
         {
             try
             {
-                var products = await _repository.GetAllAsQueryable()
-                    .Where(p => p.CategoryId == category)
-                    .ToListAsync();
+                var products =  _repository.GetAllAsQueryable()
+                    .Where(p => p.CategoryId == category).ToList();
 
                 var dtos = _mapper.Map<IEnumerable<ProductDto>>(products);
                 return Result<IEnumerable<ProductDto>>.SuccessResult(dtos);
@@ -56,9 +51,9 @@ namespace Infrastructure.Services
         {
             try
             {
-                var products = await _repository.GetAllAsQueryable()
-                    .Where(p => p.Price >= minPrice && p.Price <= maxPrice)
-                    .ToListAsync();
+                var products =  _repository.GetAllAsQueryable()
+                    .Where(p => p.Price >= minPrice && p.Price <= maxPrice).ToList();
+                  //  .ToListAsync();
 
                 var dtos = _mapper.Map<IEnumerable<ProductDto>>(products);
                 return Result<IEnumerable<ProductDto>>.SuccessResult(dtos);
@@ -104,12 +99,12 @@ namespace Infrastructure.Services
 
         public async Task<IEnumerable<Product>> SearchProductsAsync(SearchProductParameters dto)
         {
-            return await _unitOfWork.Repository<Product>().SearchAsync<SearchProductParameters>(dto);
+            return await _unitOfWork.Repository<Product>().SearchAsync(dto);
         }
 
         public async Task<Result<Pagination<Product>>> SearchAsyncProductsPaged(SearchProductParameters parameters)
         {
-            var (data, totalCount) = await _repository.SearchPagedAsync<SearchProductParameters>(
+            var (data, totalCount) = await _repository.SearchPagedAsync(
                                     parameters,
                                     page: 1,
                                     pageSize: 10,

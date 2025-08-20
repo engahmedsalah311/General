@@ -6,7 +6,7 @@ using AutoMapper;
 using Domain.Entities;
 using System.Linq.Expressions;
 
-namespace Infrastructure.Services
+namespace Application.Services
 {
     public class GenericService<T, TDto> : IGenericService<T, TDto>
         where T : BaseEntity
