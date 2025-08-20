@@ -2,7 +2,9 @@
 using AutoMapper;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,12 +17,15 @@ namespace Infrastructure.Repositories
     {
         private readonly AppDbContext _context;
         private readonly IMapper _mapper;
+        private readonly IServiceProvider _serviceProvider;
         private readonly Dictionary<Type, object> _repositories = new();
+        private Hashtable _serviceRepository;
         private IDbContextTransaction? _transaction;
 
-        public UnitOfWork(AppDbContext context,IMapper mapper){
+        public UnitOfWork(AppDbContext context,IMapper mapper,IServiceProvider serviceProvider){
             _context = context;
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+            _serviceProvider = serviceProvider;
         }
 
         public IRepository<T> Repository<T>() where T : class
@@ -31,7 +36,7 @@ namespace Infrastructure.Repositories
 
             return (IRepository<T>)_repositories[type];
         }
-
+        public TRepository RepositoryOf<TRepository> () => _serviceProvider.GetRequiredService<TRepository>();
         public async Task<int> SaveChangesAsync() => await _context.SaveChangesAsync();
 
         public async Task CommitAsync()
