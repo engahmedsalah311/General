@@ -1,0 +1,224 @@
+using Domain.Entities;
+using Infrastructure.Context;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace ECommerce.Tests
+{
+    public class TestFixture : IDisposable
+    {
+        private readonly SqliteConnection _connection;
+        private readonly ServiceProvider _serviceProvider;
+        private bool _disposed;
+
+        public TestFixture()
+        {
+            // Create and open a connection to a SQLite in-memory database
+            _connection = new SqliteConnection("Data Source=:memory:;");
+            _connection.Open();
+
+            // Configure services
+            var services = new ServiceCollection();
+
+            // Configure DbContext with SQLite in-memory
+            services.AddDbContext<AppDbContext>(options =>
+            {
+                options.UseSqlite(_connection);
+                options.EnableSensitiveDataLogging();
+            });
+
+            // Configure Identity
+            services.AddIdentity<ApplicationUser, IdentityRole>()
+                .AddEntityFrameworkStores<AppDbContext>()
+                .AddDefaultTokenProviders();
+
+            // Configure logging
+            services.AddLogging(builder =>
+
+            // Build the service provider
+            _serviceProvider = services.BuildServiceProvider();
+
+            // Create a service scope to resolve scoped services
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+                // Seed the database with test data
+                SeedData.Initialize(dbContext, userManager, roleManager).Wait();
+            }
+        }
+
+        public AppDbContext CreateDbContext()
+        {
+            var options = new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(_connection)
+                .Options;
+
+            return new AppDbContext(options);
+        }
+
+        public UserManager<ApplicationUser> CreateUserManager()
+        {
+            return _serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        }
+
+        public ILogger<T> CreateLogger<T>()
+        {
+            return _serviceProvider.GetRequiredService<ILogger<T>>();
+        }
+
+        public T GetService<T>() where T : class
+        {
+            return _serviceProvider.GetRequiredService<T>();
+        }
+
+            RoleManager<IdentityRole> roleManager)
+        {
+            // Add roles if they don't exist
+            if (!await roleManager.RoleExistsAsync("Admin"))
+            {
+                await roleManager.CreateAsync(new IdentityRole("Admin"));
+            }
+
+            if (!await roleManager.RoleExistsAsync("User"))
+            {
+                await roleManager.CreateAsync(new IdentityRole("User"));
+            }
+
+            // Create test admin user
+            var adminUser = new ApplicationUser
+            {
+                UserName = "admin@example.com",
+                Email = "admin@example.com",
+                FirstName = "Admin",
+                LastName = "User",
+                EmailConfirmed = true
+            };
+
+            if (await userManager.FindByEmailAsync(adminUser.Email) == null)
+            {
+                await userManager.CreateAsync(adminUser, "Admin@123");
+                await userManager.AddToRoleAsync(adminUser, "Admin");
+            }
+
+            // Create test regular user
+            var regularUser = new ApplicationUser
+            {
+                UserName = "user@example.com",
+                Email = "user@example.com",
+                FirstName = "Regular",
+                LastName = "User",
+                EmailConfirmed = true
+            };
+
+            if (await userManager.FindByEmailAsync(regularUser.Email) == null)
+            {
+                await userManager.CreateAsync(regularUser, "User@123");
+                await userManager.AddToRoleAsync(regularUser, "User");
+            }
+
+            // Add test categories
+            if (!dbContext.Categories.Any())
+            {
+                var categories = new List<Category>
+                {
+                    new() { Name = "Electronics", Description = "Electronic devices and accessories", IsActive = true },
+                    new() { Name = "Clothing", Description = "Clothing and apparel", IsActive = true },
+                    new() { Name = "Books", Description = "Books and publications", IsActive = true }
+                };
+
+                await dbContext.Categories.AddRangeAsync(categories);
+                await dbContext.SaveChangesAsync();
+            }
+
+            // Add test products if none exist
+            if (!dbContext.Products.Any())
+            {
+                var electronicsCategory = await dbContext.Categories.FirstOrDefaultAsync(c => c.Name == "Electronics");
+                var clothingCategory = await dbContext.Categories.FirstOrDefaultAsync(c => c.Name == "Clothing");
+                var booksCategory = await dbContext.Categories.FirstOrDefaultAsync(c => c.Name == "Books");
+
+                var products = new List<Product>
+                {
+                    new()
+                    {
+                        Name = "Smartphone X",
+                        Description = "Latest smartphone with advanced features",
+                        Price = 999.99m,
+                        StockQuantity = 50,
+                        CategoryId = electronicsCategory.Id,
+                        IsActive = true,
+                        IsBestSeller = true,
+                        ImageUrl = "/images/products/smartphone-x.jpg"
+                    },
+                    new()
+                    {
+                        Name = "Wireless Earbuds",
+                        Description = "High-quality wireless earbuds with noise cancellation",
+                        Price = 199.99m,
+                        StockQuantity = 100,
+                        CategoryId = electronicsCategory.Id,
+                        IsActive = true,
+                        IsBestSeller = true,
+                        ImageUrl = "/images/products/earbuds.jpg"
+                    },
+                    new()
+                    {
+                        Name = "Cotton T-Shirt",
+                        Description = "Comfortable cotton t-shirt",
+                        Price = 29.99m,
+                        StockQuantity = 200,
+                        CategoryId = clothingCategory.Id,
+                        IsActive = true,
+                        ImageUrl = "/images/products/tshirt.jpg"
+                    },
+                    new()
+                    {
+                        Name = "Programming Book",
+                        Description = "Comprehensive guide to programming",
+                        Price = 49.99m,
+                        StockQuantity = 30,
+                        CategoryId = booksCategory.Id,
+                        IsActive = true,
+                        ImageUrl = "/images/products/programming-book.jpg"
+                    }
+                };
+
+                await dbContext.Products.AddRangeAsync(products);
+                await dbContext.SaveChangesAsync();
+            }
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _connection.Close();
+                    _connection.Dispose();
+                    _serviceProvider.Dispose();
+                }
+                _disposed = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+    }
+}
