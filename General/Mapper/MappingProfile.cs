@@ -8,7 +8,7 @@ namespace General.Mapper
     {
         public MappingProfile()
         {
-            CreateMap<Product, ProductDto>().ReverseMap();
+            //CreateMap<Product, ProductDto>().ReverseMap();
         }
     }
 }

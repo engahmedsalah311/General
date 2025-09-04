@@ -37,10 +37,6 @@ namespace Infrastructure.Context
             return await base.SaveChangesAsync(cancellationToken);
         }
 
-        public DbSet<Product> Products { get; set; }
-        public DbSet<Category> Categorys { get; set; }
-        public DbSet<Department> departments { get; set; }
-        public DbSet<Client> Clients { get; set; }
-        public DbSet<Employee> Employees { get; set; }
+        
     }
 }
