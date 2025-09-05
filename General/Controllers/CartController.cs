@@ -64,7 +64,7 @@ namespace General.Controllers
             try
             {
                 var userId = GetCurrentUserId();
-                var cart = await _cartService.AddToCartAsync(userId, addToCartDto);
+                var cart = await _cartService.AddItemToCartAsync(userId, addToCartDto);
                 return Ok(cart);
             }
             catch (KeyNotFoundException ex)
@@ -94,7 +94,7 @@ namespace General.Controllers
             try
             {
                 var userId = GetCurrentUserId();
-                var cart = await _cartService.UpdateCartItemAsync(userId, itemId, updateDto.Quantity);
+                var cart = await _cartService.UpdateCartItemAsync(userId, updateDto);
                 return Ok(cart);
             }
             catch (KeyNotFoundException ex)
@@ -117,7 +117,7 @@ namespace General.Controllers
             try
             {
                 var userId = GetCurrentUserId();
-                var cart = await _cartService.RemoveFromCartAsync(userId, itemId);
+                var cart = await _cartService.RemoveItemFromCartAsync(userId, itemId);
                 return Ok(cart);
             }
             catch (KeyNotFoundException ex)

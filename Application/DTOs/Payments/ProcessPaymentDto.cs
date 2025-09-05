@@ -15,5 +15,6 @@ namespace Application.DTOs.Payments
         public string PaymentMethod { get; set; }
         
         public string PaymentDetails { get; set; }
+        public string? Currency { get; set; }
     }
 }

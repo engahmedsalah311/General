@@ -34,7 +34,10 @@ namespace General.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var orders = await _orderService.GetUserOrdersAsync(userId);
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
+                var isAdmin = false;
+                if(userRole == "Admin") isAdmin = true;
+                var orders = await _orderService.GetOrdersAsync(new OrderFilterDto(),userId,isAdmin);
                 return Ok(orders);
             }
             catch (Exception ex)
@@ -53,7 +56,10 @@ namespace General.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var order = await _orderService.GetOrderByIdAsync(id, userId);
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
+                var isAdmin = false;
+                if (userRole == "Admin") isAdmin = true;
+                var order = await _orderService.GetOrderByIdAsync(id, userId,isAdmin);
                 return Ok(order);
             }
             catch (KeyNotFoundException)
@@ -83,7 +89,7 @@ namespace General.Controllers
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var order = await _orderService.CreateOrderAsync(userId, createOrderDto);
+                var order = await _orderService.CreateOrderAsync(createOrderDto, userId);
                 return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
             }
             catch (InvalidOperationException ex)
@@ -109,7 +115,11 @@ namespace General.Controllers
 
             try
             {
-                await _orderService.UpdateOrderStatusAsync(id, updateStatusDto.Status);
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var isAdmin = false;
+                if (userRole == "Admin") isAdmin = true;
+                await _orderService.UpdateOrderStatusAsync(id, updateStatusDto,userId,isAdmin);
                 return NoContent();
             }
             catch (KeyNotFoundException)
@@ -131,8 +141,11 @@ namespace General.Controllers
         {
             try
             {
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                await _orderService.CancelOrderAsync(id, userId);
+                var isAdmin = false;
+                if (userRole == "Admin") isAdmin = true;
+                await _orderService.CancelOrderAsync(id, userId,isAdmin);
                 return NoContent();
             }
             catch (KeyNotFoundException)
@@ -163,7 +176,11 @@ namespace General.Controllers
         {
             try
             {
-                var orders = await _orderService.GetAllOrdersAsync(filter);
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var isAdmin = false;
+                if (userRole == "Admin") isAdmin = true;
+                var orders = await _orderService.GetOrdersAsync(filter,userId,isAdmin);
                 return Ok(orders);
             }
             catch (Exception ex)

@@ -62,7 +62,7 @@ namespace Application.Services
                 };
                 
                 var product = await _unitOfWork.Repository<Product>()
-                    .FirstOrDefaultIncAsync(
+                    .FirstOrDefaultIncAsync<ProductDto>(
                         filters: filters,
                         includes: includes
                     );
@@ -83,8 +83,8 @@ namespace Application.Services
                     CategoryId = product.CategoryId,
                     CategoryName = product.Category?.Name,
                     IsActive = product.IsActive,
-                    CreatedAt = product.CreatedAt,
-                    UpdatedAt = product.UpdatedAt
+                    CreatedAt = product.CreatedAt.Value,
+                    LastUpdated = product.UpdatedAt
                 };
             }
             catch (Exception ex)
@@ -295,8 +295,7 @@ namespace Application.Services
                         page: pageNumber,
                         pageSize: pageSize,
                         filters: filters,
-                        includes: includes,
-                        orderBy: q => q.OrderBy(p => p.Name)
+                        includes: includes
                     );
 
                 return result.Data;
@@ -308,37 +307,37 @@ namespace Application.Services
             }
         }
 
-        public async Task<IEnumerable<ProductDto>> GetPagedItemAsync(Expression<Func<ProductDto, bool>> predicate, int pageNumber = 1, int pageSize = 10)
-        {
-            try
-            {
-                var allProducts = await _unitOfWork.Repository<Product>()
-                    .GetAll()
-                    .Include(p => p.Category)
-                    .Where(p => p.IsActive)
-                    .Select(p => MapToDto(p))
-                    .ToListAsync();
+        //public async Task<IEnumerable<ProductDto>> GetPagedItemAsync(Expression<Func<ProductDto, bool>> predicate, int pageNumber = 1, int pageSize = 10)
+        //{
+        //    try
+        //    {
+        //        var allProducts = await _unitOfWork.Repository<Product>()
+        //            .GetAll()
+        //            .Include(p => p.Category)
+        //            .Where(p => p.IsActive)
+        //            .Select(p => MapToDto(p))
+        //            .ToListAsync();
 
-                return allProducts
-                    .AsQueryable()
-                    .Where(predicate)
-                    .Skip((pageNumber - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving filtered paged products");
-                throw;
-            }
-        }
+        //        return allProducts
+        //            .AsQueryable()
+        //            .Where(predicate)
+        //            .Skip((pageNumber - 1) * pageSize)
+        //            .Take(pageSize)
+        //            .ToList();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error retrieving filtered paged products");
+        //        throw;
+        //    }
+        //}
 
         public async Task<ProductListDto> GetFilteredProductsAsync(ProductFilterDto filter)
         {
             try
             {
                 var includes = new List<Expression<Func<Product, object>>> { p => p.Category };
-                var filters = new List<Expression<Func<Product, bool>>> { p => !p.IsDeleted };
+                var filters = new List<Expression<Func<Product, bool>>> { p => !p.IsActive };
 
                 // Apply search term filter
                 if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
@@ -378,23 +377,23 @@ namespace Application.Services
                 }
 
                 // Apply sorting
-                var sortOrder = filter.SortOrder?.ToLower() ?? "";
-                var orderBy = sortOrder switch
-                {
-                    "price_asc" => (Expression<Func<Product, object>>)(p => p.Price),
-                    "price_desc" => (Expression<Func<Product, object>>)(p => p.Price),
-                    "name_asc" => p => p.Name,
-                    "name_desc" => (Expression<Func<Product, object>>)(p => p.Name),
-                    "newest" => (Expression<Func<Product, object>>)(p => p.CreatedAt),
-                    _ => p => p.Name
-                };
+                //var sortOrder = filter.SortOrder?.ToLower() ?? "";
+                //var orderBy = sortOrder switch
+                //{
+                //    "price_asc" => (Expression<Func<Product, object>>)(p => p.Price),
+                //    "price_desc" => (Expression<Func<Product, object>>)(p => p.Price),
+                //    "name_asc" => p => p.Name,
+                //    "name_desc" => (Expression<Func<Product, object>>)(p => p.Name),
+                //    "newest" => (Expression<Func<Product, object>>)(p => p.CreatedAt),
+                //    _ => p => p.Name
+                //};
 
-                var isDescending = sortOrder switch
-                {
-                    "price_desc" => true,
-                    "name_desc" => true,
-                    _ => false
-                };
+                //var isDescending = sortOrder switch
+                //{
+                //    "price_desc" => true,
+                //    "name_desc" => true,
+                //    _ => false
+                //};
 
                 // Use the repository's search functionality
                 var result = await _unitOfWork.Repository<Product>()
@@ -434,8 +433,8 @@ namespace Application.Services
                 CategoryId = product.CategoryId,
                 CategoryName = product.Category?.Name,
                 IsActive = product.IsActive,
-                CreatedAt = product.CreatedAt,
-                UpdatedAt = product.UpdatedAt
+                CreatedAt = product.CreatedAt.Value,
+                LastUpdated = product.UpdatedAt
             };
         }
     }

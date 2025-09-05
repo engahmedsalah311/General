@@ -16,6 +16,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Application.Services;
+using Application.Interfaces;
+using Infrastructure.Repositories;
+using Application.DTOs;
 
 public class Program
 {
@@ -65,8 +68,11 @@ public class Startup
     {
         // Add infrastructure services
         services.AddInfrastructure(Configuration);
-        
+        services.AddAutoMapper(typeof(Program));
+
         // Register application services
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IGenericService<BaseEntity, GeneralDto>, GenericService<BaseEntity, GeneralDto>>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProductService, ProductService>();
@@ -96,25 +102,25 @@ public class Startup
         var jwtSettings = Configuration.GetSection("JwtSettings");
         var key = Encoding.ASCII.GetBytes(jwtSettings["Secret"]!);
 
-        services.AddAuthentication(options =>
-        {
-            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        })
-        .AddJwtBearer(options =>
-        {
-            options.RequireHttpsMetadata = false;
-            options.SaveToken = true;
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(key),
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.Zero
-            };
-        });
+        //services.AddAuthentication(options =>
+        //{
+        //    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        //    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        //})
+        //.AddJwtBearer(options =>
+        //{
+        //    options.RequireHttpsMetadata = false;
+        //    options.SaveToken = true;
+        //    options.TokenValidationParameters = new TokenValidationParameters
+        //    {
+        //        ValidateIssuerSigningKey = true,
+        //        IssuerSigningKey = new SymmetricSecurityKey(key),
+        //        ValidateIssuer = false,
+        //        ValidateAudience = false,
+        //        ValidateLifetime = true,
+        //        ClockSkew = TimeSpan.Zero
+        //    };
+        //});
 
         // Configure Swagger
         services.AddSwaggerGen(c =>

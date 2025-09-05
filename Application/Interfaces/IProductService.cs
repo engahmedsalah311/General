@@ -17,7 +17,7 @@ namespace Application.Interfaces
         Task<IEnumerable<ProductDto>> GetProductsByCategoryAsync(string category);
         Task<IEnumerable<ProductDto>> GetProductsInPriceRangeAsync(decimal minPrice, decimal maxPrice);
         Task<IEnumerable<ProductDto>> GetPagedItemAsync(int pageNumber = 1, int pageSize = 10);
-        Task<IEnumerable<ProductDto>> GetPagedItemAsync(Expression<Func<ProductDto, bool>> predicate, int pageNumber = 1, int pageSize = 10);
+        //Task<IEnumerable<ProductDto>> GetPagedItemAsync(Expression<Func<ProductDto, bool>> predicate, int pageNumber = 1, int pageSize = 10);
         
         /// <summary>
         /// Gets filtered, sorted, and paginated products based on filter criteria

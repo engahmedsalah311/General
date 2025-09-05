@@ -1,16 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Linq.Expressions;
-using System.Security.Claims;
+using System.Threading.Tasks;
 using Application.DTOs.Orders;
 using Application.DTOs.Payments;
 using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using DomainEnums = Domain.Enums;
 
 namespace Application.Services
 {
@@ -65,7 +66,7 @@ namespace Application.Services
                 if (filter.Status.HasValue)
                 {
                     // Explicitly use Domain.Enums.OrderStatus
-                    filters.Add(o => o.Status == (Domain.Enums.OrderStatus)filter.Status.Value);
+                    filters.Add(o => o.Status.ToString() == filter.Status.Value.ToString());
                 }
 
                 if (filter.FromDate.HasValue)
@@ -115,21 +116,20 @@ namespace Application.Services
                 };
 
                 // Get paginated results using repository
-                var pagedResult = await _unitOfWork.Repository<Order>()
+                var (data, totalCount) = await _unitOfWork.Repository<Order>()
                     .GetPagedMappedAsync<OrderDto>(
-                        pageNumber: filter.PageNumber,
+                        page: filter.PageNumber,
                         pageSize: filter.PageSize,
                         filters: filters,
-                        orderBy: orderBy,
                         includes: includes
                     );
 
                 return new OrderListDto
                 {
-                    Items = pagedResult.Items,
-                    TotalCount = pagedResult.TotalCount,
-                    PageNumber = pagedResult.PageNumber,
-                    PageSize = pagedResult.PageSize
+                    Items = data,
+                    TotalCount = totalCount,
+                    PageNumber = filter.PageNumber,
+                    PageSize = filter.PageSize
                 };
             }
             catch (Exception ex)
@@ -139,7 +139,7 @@ namespace Application.Services
             }
         }
 
-        public async Task<OrderDto> GetOrderByIdAsync(int id, string userId, bool isAdmin)
+        public async Task<OrderDto> GetOrderByIdAsync(int id, string userId, bool isAdmin = false)
         {
             try
             {
@@ -165,7 +165,10 @@ namespace Application.Services
 
                 // Get order with includes
                 var order = await _unitOfWork.Repository<Order>()
-                    .FirstOrDefaultIncAsync(filters, includes);
+                    .FirstOrDefaultIncAsync<OrderDto>(
+                        filters: filters,
+                        includes: includes
+                    );
 
                 if (order == null)
                 {
@@ -179,8 +182,8 @@ namespace Application.Services
                     UserId = order.UserId,
                     CustomerEmail = order.User?.Email,
                     OrderTotal = order.TotalAmount,
-                    Status = order.Status,
-                    CreatedAt = order.CreatedAt,
+                    Status = (DTOs.Orders.OrderStatus)order.Status,
+                    CreatedAt = order.CreatedAt.Value,
                     UpdatedAt = order.UpdatedAt,
                     OrderItems = order.OrderItems.Select(oi => new OrderItemDto
                     {
@@ -189,7 +192,7 @@ namespace Application.Services
                         ProductName = oi.Product?.Name,
                         Quantity = oi.Quantity,
                         UnitPrice = oi.UnitPrice,
-                        //TotalPrice = oi.TotalPrice
+                        // TotalPrice is calculated in the entity
                     }).ToList()
                 };
             }
@@ -210,15 +213,15 @@ namespace Application.Services
             
             foreach (var item in order.OrderItems)
             {
-                var product = await productRepo.GetByIdAsync<object>(item.ProductId);
+                var product = await productRepo.GetByIdAsync(item.ProductId);
                 if (product != null)
                 {
                     product.StockQuantity += item.Quantity;
-                    productRepo.Update(product);
+                    _unitOfWork.Repository<Product>().Update(product);
                 }
             }
             
-            await _unitOfWork.CompleteAsync();
+            await _unitOfWork.SaveChangesAsync();
         }
 
         public async Task<OrderDto> CreateOrderAsync(CreateOrderDto createOrderDto, string userId)
@@ -235,7 +238,7 @@ namespace Application.Services
                 {
                     UserId = userId,
                     OrderNumber = GenerateOrderNumber(),
-                    Status = Domain.Entities.OrderStatus.Pending,
+                    Status = (Domain.Entities.OrderStatus)DomainEnums.OrderStatus.Pending,
                     TotalAmount = 0,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -247,14 +250,20 @@ namespace Application.Services
                 
                 // Get product repository
                 var productRepo = _unitOfWork.Repository<Product>();
-                
+
                 // Process each order item
+                
+                
                 foreach (var item in createOrderDto.OrderItems)
                 {
                     // Get product with filters
-                    var product = await productRepo.FirstOrDefaultAsync(
-                        predicate: p => p.Id == item.ProductId && p.IsActive
-                    );
+                    var filters = new List<Expression<Func<Product, bool>>>
+                    {
+                        p => p.Id == item.ProductId,
+                        p => p.IsActive
+                    };
+                    
+                    var product = await _unitOfWork.Repository<Product>().FirstOrDefaultIncAsync<Product>(filters);
 
                     if (product == null)
                     {
@@ -271,7 +280,7 @@ namespace Application.Services
                         ProductId = product.Id,
                         Quantity = item.Quantity,
                         UnitPrice = product.Price,
-                        //TotalPrice = product.Price * item.Quantity
+                        // TotalPrice is calculated in the entity
                     };
 
                     totalAmount += orderItem.TotalPrice;
@@ -279,7 +288,7 @@ namespace Application.Services
 
                     // Update product stock
                     product.StockQuantity -= item.Quantity;
-                    productRepo.Update(product);
+                    _unitOfWork.Repository<Product>().Update(product);
                 }
 
                 // Update order total and items
@@ -288,15 +297,15 @@ namespace Application.Services
 
                 // Save order
                 await _unitOfWork.Repository<Order>().AddAsync(order);
-                await _unitOfWork.CompleteAsync();
+                await _unitOfWork.SaveChangesAsync();
 
                 // Process payment
                 var paymentResult = await _paymentService.ProcessPaymentAsync(new ProcessPaymentDto
                 {
                     OrderId = order.Id,
                     Amount = order.TotalAmount,
-                    PaymentMethod = createOrderDto.PaymentMethod,
-                    PaymentDetails = createOrderDto.PaymentDetails
+                    PaymentMethod = createOrderDto.PaymentMethod.ToString(),
+                    PaymentDetails = createOrderDto.PaymentToken ?? createOrderDto.PaymentMethod.ToString()
                 });
 
                 if (!paymentResult.Success)
@@ -306,13 +315,13 @@ namespace Application.Services
                 }
 
                 // Update order status
-                order.Status = Domain.Enums.OrderStatus.Processing;
-                order.PaymentStatus = Domain.Enums.PaymentStatus.Paid;
+                order.Status = (Domain.Entities.OrderStatus)DomainEnums.OrderStatus.Processing;
+                order.PaymentStatus = (Domain.Entities.PaymentStatus)DomainEnums.PaymentStatus.Paid;
                 order.UpdatedAt = DateTime.UtcNow;
                 _unitOfWork.Repository<Order>().Update(order);
-                await _unitOfWork.CompleteAsync();
+                await _unitOfWork.SaveChangesAsync();
 
-                await _unitOfWork.CommitAsync();
+                await _unitOfWork.SaveChangesAsync();
 
                 return await GetOrderByIdAsync(order.Id, userId, false);
             }
@@ -339,26 +348,16 @@ namespace Application.Services
                 {
                     filters.Add(o => o.UserId == userId);
                 }
-
+                var includes = new List<Expression<Func<Order, object>>>
+                {
+                    o => o.OrderItems,
+                    o => o.OrderItems.Select(oi => oi.Product),
+                };
                 // Get order with includes
-                var order = await _unitOfWork.Repository<Order>()
-                    .FirstOrDefaultAsync(
-                        predicate: filters.Count == 1 ? filters[0] : filters.Aggregate((current, next) => {
-                            var param = Expression.Parameter(typeof(Order), "o");
-                            var body = Expression.AndAlso(
-                                Expression.Invoke(current, param),
-                                Expression.Invoke(next, param)
-                            );
-                            return Expression.Lambda<Func<Order, bool>>(body, param);
-                        }),
-                        include: source => {
-                            var query = source;
-                            query = query.Include(o => o.OrderItems)
-                                       .ThenInclude(oi => oi.Product);
-                            query = query.Include(o => o.User);
-                            return query;
-                        }
-                    );
+
+                
+
+                var order = await _unitOfWork.Repository<Order>().FirstOrDefaultIncAsync<Order>(filters,includes);
 
                 if (order == null)
                 {
@@ -366,24 +365,24 @@ namespace Application.Services
                 }
 
                 // Validate status transition
-                if (!IsValidStatusTransition(order.Status, updateDto.Status))
+                if (!IsValidStatusTransition((Domain.Enums.OrderStatus)order.Status,(Domain.Enums.OrderStatus) updateDto.Status))
                 {
                     throw new InvalidOperationException($"Invalid status transition from {order.Status} to {updateDto.Status}");
                 }
 
                 // Update order status
-                order.Status = updateDto.Status;
+                order.Status = (Domain.Entities.OrderStatus)updateDto.Status;
                 order.UpdatedAt = DateTime.UtcNow;
 
                 // If order is being cancelled, return stock
-                if (updateDto.Status == DTOs.Orders.OrderStatus.Cancelled)
+                if (updateDto.Status.ToString() == DomainEnums.OrderStatus.Cancelled.ToString())
                 {
                     await ReturnOrderItemsToStockAsync(order);
                 }
 
                 // Update order
                 _unitOfWork.Repository<Order>().Update(order);
-                await _unitOfWork.CompleteAsync();
+                await _unitOfWork.SaveChangesAsync();
 
                 return await GetOrderByIdAsync(order.Id, userId, isAdmin);
             }
@@ -420,7 +419,7 @@ namespace Application.Services
 
                 // Get order with includes
                 var order = await _unitOfWork.Repository<Order>()
-                    .FirstOrDefaultIncAsync(
+                    .FirstOrDefaultIncAsync<OrderDto>(
                         filters: filters,
                         includes: new List<Expression<Func<Order, object>>>
                         {
@@ -435,13 +434,13 @@ namespace Application.Services
                 }
 
                 // Check if order can be cancelled
-                if (order.Status != Domain.Enums.OrderStatus.Pending && order.Status != Domain.Enums.OrderStatus.Processing)
+                if (order.Status.ToString() != DomainEnums.OrderStatus.Pending.ToString() && order.Status.ToString() != DomainEnums.OrderStatus.Processing.ToString())
                 {
                     throw new InvalidOperationException($"Cannot cancel order with status {order.Status}");
                 }
 
                 // Update order status
-                order.Status = OrderStatus.Cancelled;
+                order.Status = Domain.Entities.OrderStatus.Cancelled;
                 order.UpdatedAt = DateTime.UtcNow;
 
                 // Return items to stock
@@ -449,7 +448,7 @@ namespace Application.Services
 
                 // Update order
                 _unitOfWork.Repository<Order>().Update(order);
-                await _unitOfWork.SaveAsync();
+                await _unitOfWork.SaveChangesAsync();
 
                 return true;
             }
@@ -477,12 +476,12 @@ namespace Application.Services
                 {
                     o => o.Id == orderId,
                     o => o.UserId == userId,
-                    o => o.Status == OrderStatus.Pending
+                    o => o.Status.ToString() == DomainEnums.OrderStatus.Pending.ToString()
                 };
 
                 // Get order with includes
                 var order = await _unitOfWork.Repository<Order>()
-                    .FirstOrDefaultIncAsync(
+                    .FirstOrDefaultIncAsync<OrderDto>(
                         filters: filters,
                         includes: new List<Expression<Func<Order, object>>>
                         {
@@ -501,21 +500,21 @@ namespace Application.Services
                 {
                     OrderId = order.Id,
                     Amount = order.TotalAmount,
-                    PaymentMethod = order.PaymentMethod,
-                    PaymentDetails = order.PaymentDetails
+                    PaymentMethod = order.PaymentMethod.ToString(),
+                    PaymentDetails = order.TransactionId ?? order.PaymentMethod.ToString()
                 });
 
                 if (paymentResult.Success)
                 {
                     // Update order status and payment details
-                    order.Status = OrderStatus.Processing;
-                    order.PaymentStatus = PaymentStatus.Paid;
+                    order.Status = Domain.Entities.OrderStatus.Processing;
+                    order.PaymentStatus = Domain.Entities.PaymentStatus.Paid;
                     order.TransactionId = paymentResult.TransactionId;
                     order.UpdatedAt = DateTime.UtcNow;
 
                     // Update order
                     _unitOfWork.Repository<Order>().Update(order);
-                    await _unitOfWork.SaveAsync();
+                    await _unitOfWork.SaveChangesAsync();
 
                     _logger.LogInformation("Payment processed successfully for order {OrderId}", orderId);
                     return true;
@@ -549,7 +548,7 @@ namespace Application.Services
 
                 // Get order with includes
                 var order = await _unitOfWork.Repository<Order>()
-                    .FirstOrDefaultIncAsync(
+                    .FirstOrDefaultIncAsync<OrderDto>(
                         filters: filters,
                         includes: new List<Expression<Func<Order, object>>>
                         {
@@ -564,12 +563,12 @@ namespace Application.Services
                 }
 
                 // Check if order can be refunded
-                if (order.Status != OrderStatus.Delivered && order.Status != OrderStatus.Processing)
+                if (order.Status.ToString() != DomainEnums.OrderStatus.Delivered.ToString() && order.Status.ToString() != DomainEnums.OrderStatus.Processing.ToString())
                 {
                     throw new InvalidOperationException($"Cannot refund order with status {order.Status}");
                 }
 
-                if (order.PaymentStatus != PaymentStatus.Paid)
+                if (order.PaymentStatus.ToString() != DomainEnums.PaymentStatus.Paid.ToString())
                 {
                     throw new InvalidOperationException("Cannot refund order that hasn't been paid");
                 }
@@ -589,8 +588,8 @@ namespace Application.Services
                 }
 
                 // Update order status
-                order.Status = OrderStatus.Refunded;
-                order.PaymentStatus = PaymentStatus.Refunded;
+                order.Status = Domain.Entities.OrderStatus.Refunded;
+                order.PaymentStatus = Domain.Entities.PaymentStatus.Refunded;
                 order.UpdatedAt = DateTime.UtcNow;
 
                 // Return items to stock
@@ -598,7 +597,7 @@ namespace Application.Services
 
                 // Update order
                 _unitOfWork.Repository<Order>().Update(order);
-                await _unitOfWork.SaveAsync();
+                await _unitOfWork.SaveChangesAsync();
 
                 _logger.LogInformation("Order {OrderId} refunded successfully", orderId);
                 return true;
@@ -620,14 +619,27 @@ namespace Application.Services
 
         public async Task<OrderDto> AddOrderItemAsync(int orderId, AddOrderItemDto itemDto, string userId)
         {
-            var orderRepo = _unitOfWork.Repository<Order>();
-            var order = await orderRepo.GetAll()
-                .Include(o => o.OrderItems)
-                    .ThenInclude(oi => oi.Product)
-                .Include(o => o.User)
-                .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
+            var filters = new List<Expression<Func<Order, bool>>>
+                {
+                    o => o.Id == orderId,
+                    o => o.UserId == userId
+                };
+            var includes = new List<Expression<Func<Order, object>>>
+                {
+                    o => o.OrderItems,
+                    o => o.OrderItems.Select(oi => oi.Product),
+                    o => o.User
+                };
 
-            if (order == null || order.Status != OrderStatus.Pending)
+            var orderRepo = _unitOfWork.Repository<Order>();
+            var order = await _unitOfWork.Repository<Order>().FirstOrDefaultIncAsync<Order>(filters, includes);
+                //.AsQueryable()
+                //.Include(o => o.OrderItems)
+                //    .ThenInclude(oi => oi.Product)
+                //.Include(o => o.User)
+                //.FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
+
+            if (order == null || order.Status.ToString() != DomainEnums.OrderStatus.Pending.ToString())
                 return null;
 
             var productRepo = _unitOfWork.Repository<Product>();
@@ -643,11 +655,11 @@ namespace Application.Services
                 ProductId = itemDto.ProductId,
                 Quantity = itemDto.Quantity,
                 UnitPrice = product.Price,
-                TotalPrice = product.Price * itemDto.Quantity
+                // TotalPrice is calculated in the entity
             };
 
             // Update order total
-            order.TotalAmount += orderItem.TotalPrice;
+            order.TotalAmount += orderItem.Quantity * orderItem.UnitPrice;
             order.UpdatedAt = DateTime.UtcNow;
 
             // Update product stock
@@ -655,9 +667,9 @@ namespace Application.Services
 
             // Save changes
             await _unitOfWork.Repository<OrderItem>().AddAsync(orderItem);
-            await productRepo.UpdateAsync(product);
-            await orderRepo.UpdateAsync(order);
-            await _unitOfWork.CommitAsync();
+            productRepo.Update(product);
+            orderRepo.Update(order);
+            await _unitOfWork.SaveChangesAsync();
 
             // Return updated order
             return new OrderDto
@@ -667,8 +679,8 @@ namespace Application.Services
                 UserId = order.UserId,
                 CustomerEmail = order.User?.Email,
                 OrderTotal = order.TotalAmount,
-                Status = order.Status,
-                CreatedAt = order.CreatedAt,
+                Status = (DTOs.Orders.OrderStatus)order.Status,
+                CreatedAt = order.CreatedAt.Value,
                 UpdatedAt = order.UpdatedAt,
                 OrderItems = order.OrderItems?.Select(oi => new OrderItemDto
                 {
@@ -677,20 +689,32 @@ namespace Application.Services
                     ProductName = oi.Product?.Name,
                     Quantity = oi.Quantity,
                     UnitPrice = oi.UnitPrice,
-                    TotalPrice = oi.TotalPrice
+                    // TotalPrice is calculated in the entity
                 }).ToList()
             };
         }
 
         public async Task<bool> RemoveOrderItemAsync(int orderId, int itemId, string userId)
         {
-            var orderRepo = _unitOfWork.Repository<Order>();
-            var order = await orderRepo.GetAll()
-                .Include(o => o.OrderItems)
-                    .ThenInclude(oi => oi.Product)
-                .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
+            var filters = new List<Expression<Func<Order, bool>>>
+                {
+                    o => o.Id == orderId,
+                    o => o.UserId == userId
+                };
+            var includes = new List<Expression<Func<Order, object>>>
+                {
+                    o => o.OrderItems,
+                    o => o.OrderItems.Select(oi => oi.Product),
+                    o => o.User
+                };
+            var order = await _unitOfWork.Repository<Order>().FirstOrDefaultIncAsync<Order>(filters, includes);
+            //var order = await _unitOfWork.Repository<Order>()
+            //    .AsQueryable()
+            //    .Include(o => o.OrderItems)
+            //        .ThenInclude(oi => oi.Product)
+            //    .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
 
-            if (order == null || order.Status != OrderStatus.Pending)
+            if (order == null || order.Status .ToString() != DomainEnums.OrderStatus.Pending.ToString())
                 return false;
 
             var orderItem = order.OrderItems.FirstOrDefault(oi => oi.Id == itemId);
@@ -698,7 +722,7 @@ namespace Application.Services
                 return false;
 
             // Update order total
-            order.TotalAmount -= orderItem.TotalPrice;
+            order.TotalAmount -= orderItem.Quantity * orderItem.UnitPrice;
             order.UpdatedAt = DateTime.UtcNow;
 
             // Update product stock
@@ -707,14 +731,13 @@ namespace Application.Services
             if (product != null)
             {
                 product.StockQuantity += orderItem.Quantity;
-                await productRepo.UpdateAsync(product);
+                _unitOfWork.Repository<Product>().Update(product);
             }
 
             // Remove order item
-            var orderItemRepo = _unitOfWork.Repository<OrderItem>();
-            await orderItemRepo.DeleteAsync(orderItem);
-            await orderRepo.UpdateAsync(order);
-            await _unitOfWork.CommitAsync();
+            _unitOfWork.Repository<OrderItem>().Delete(orderItem);
+            _unitOfWork.Repository<Order>().Update(order);
+            await _unitOfWork.SaveChangesAsync();
 
             return true;
         }
@@ -741,18 +764,23 @@ namespace Application.Services
         {
             var orderItemRepo = _unitOfWork.Repository<OrderItem>();
             var productRepo = _unitOfWork.Repository<Product>();
-
-            var orderItems = await orderItemRepo.GetAll()
-                .Where(oi => oi.OrderId == orderId)
-                .Include(oi => oi.Product)
-                .ToListAsync();
+            var filters = new List<Expression<Func<OrderItem, bool>>>
+            {
+                oi => oi.Id== orderId,
+            };
+            var includes = new List<Expression<Func<OrderItem, object>>>
+            {
+                o => o.Product
+            };
+            var orderItems = await orderItemRepo.FindByIncAsync<OrderItem>(filters, includes);
+                
 
             foreach (var item in orderItems)
             {
                 if (item.Product != null)
                 {
                     item.Product.StockQuantity += item.Quantity;
-                    await productRepo.UpdateAsync(item.Product);
+                    productRepo.Update(item.Product);
                 }
             }
         }

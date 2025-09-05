@@ -49,7 +49,7 @@ namespace Application.Services
                     Name = c.Name,
                     Description = c.Description,
                     IsActive = c.IsActive,
-                    ProductCount = c.Products?.Count ?? 0
+                    ProductCount = c.ProductCount
                 });
 
                 return result;
@@ -76,7 +76,7 @@ namespace Application.Services
                 };
 
                 var category = await _unitOfWork.Repository<Category>()
-                    .FirstOrDefaultIncAsync(
+                    .FirstOrDefaultIncAsync<CategoryDto>(
                         filters: filters,
                         includes: includes
                     );
@@ -175,7 +175,7 @@ namespace Application.Services
                 };
 
                 var category = await _unitOfWork.Repository<Category>()
-                    .FirstOrDefaultIncAsync(filters, includes);
+                    .FirstOrDefaultIncAsync<CategoryDto>(filters, includes);
 
                 if (category == null)
                 {
@@ -205,9 +205,8 @@ namespace Application.Services
                 {
                     c => c.Id == id && c.IsActive
                 };
-
-                return await _unitOfWork.Repository<Category>()
-                    .AnyAsync(filters);
+                var isExist = (await _unitOfWork.Repository<Category>().FindByIncAsync<Category>(filters)).Any();
+                return isExist;
             }
             catch (Exception ex)
             {
@@ -229,9 +228,8 @@ namespace Application.Services
                 {
                     filters.Add(c => c.Id != excludeId.Value);
                 }
-
-                return await _unitOfWork.Repository<Category>()
-                    .AnyAsync(filters);
+                var isExist = (await _unitOfWork.Repository<Category>().FindByIncAsync<Category>(filters)).Any();
+                return isExist;
             }
             catch (Exception ex)
             {

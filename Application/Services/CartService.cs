@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Application.DTOs.Cart;
 using Application.Interfaces;
@@ -54,7 +55,7 @@ namespace Application.Services
                 }
                 else
                 {
-                    cart.Items.Add(new ShoppingCartItem
+                    cart.Items.Add(new CartItem
                     {
                         ProductId = addToCartDto.ProductId,
                         Quantity = addToCartDto.Quantity,
@@ -77,11 +78,11 @@ namespace Application.Services
             try
             {
                 var cart = await GetOrCreateCartAsync(userId);
-                var item = cart.Items.FirstOrDefault(i => i.Id == updateCartItemDto.ItemId);
+                var item = cart.Items.FirstOrDefault(i => i.Id == updateCartItemDto.CartItemId);
 
                 if (item == null)
                 {
-                    throw new KeyNotFoundException($"Item with ID {updateCartItemDto.ItemId} not found in cart");
+                    throw new KeyNotFoundException($"Item with ID {updateCartItemDto.CartItemId} not found in cart");
                 }
 
                 if (updateCartItemDto.Quantity <= 0)
@@ -163,11 +164,19 @@ namespace Application.Services
 
         private async Task<ShoppingCart> GetOrCreateCartAsync(string userId)
         {
+            var filters = new List<Expression<Func<ShoppingCart, bool>>>
+            {
+                c => c.UserId == userId,
+            };
+            var includes = new List<Expression<Func<ShoppingCart, object>>>
+            {
+                c => c.Items,
+                c => c.Items.Select(a=>a.Product),
+            };
+           
             var cart = (await _unitOfWork.Repository<ShoppingCart>()
-                .GetAsync(
-                    filter: c => c.UserId == userId,
-                    includeProperties: "Items,Items.Product"))
-                .FirstOrDefault();
+                .FirstOrDefaultIncAsync<ShoppingCart>(
+                    filters,includes));
 
             if (cart == null)
             {
@@ -192,9 +201,9 @@ namespace Application.Services
                     ProductName = i.Product?.Name ?? "Unknown Product",
                     Quantity = i.Quantity,
                     UnitPrice = i.UnitPrice,
-                    TotalPrice = i.Quantity * i.UnitPrice
+                    //TotalPrice = i.Quantity * i.UnitPrice
                 }).ToList(),
-                TotalPrice = cart.Items.Sum(i => i.Quantity * i.UnitPrice)
+                //TotalPrice = cart.Items.Sum(i => i.Quantity * i.UnitPrice)
             };
         }
     }

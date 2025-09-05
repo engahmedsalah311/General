@@ -11,7 +11,8 @@ namespace Domain.Entities
         Processing,
         Shipped,
         Delivered,
-        Cancelled
+        Cancelled,
+        Refunded
     }
 
     public enum PaymentMethod

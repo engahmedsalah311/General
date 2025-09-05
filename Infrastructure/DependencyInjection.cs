@@ -14,16 +14,22 @@ using System.Text;
 using Polly;
 using Polly.Extensions.Http;
 using System;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Threading.Tasks;
+using Application.DTOs;
+using Application.Services;
+using Infrastructure.Repositories;
 
 namespace Infrastructure
 {
     public static class DependencyInjection
     {
         public static IServiceCollection AddInfrastructure(
-            this IServiceCollection services, 
+            this IServiceCollection services,
             IConfiguration configuration)
         {
-            // Configure DbContext
+            // Configure DbContext (runtime)
             services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlServer(
                     configuration.GetConnectionString("DefaultConnection"),
@@ -32,7 +38,6 @@ namespace Infrastructure
             // Configure Identity
             services.AddIdentity<ApplicationUser, IdentityRole>(options =>
             {
-                // Password settings
                 options.Password.RequireDigit = true;
                 options.Password.RequireLowercase = true;
                 options.Password.RequireNonAlphanumeric = true;
@@ -40,12 +45,10 @@ namespace Infrastructure
                 options.Password.RequiredLength = 8;
                 options.Password.RequiredUniqueChars = 1;
 
-                // Lockout settings
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
                 options.Lockout.MaxFailedAccessAttempts = 5;
                 options.Lockout.AllowedForNewUsers = true;
 
-                // User settings
                 options.User.RequireUniqueEmail = true;
                 options.SignIn.RequireConfirmedEmail = false;
             })
@@ -76,25 +79,42 @@ namespace Infrastructure
                     });
             });
 
-            // Register services
-            services.AddScoped<JwtService>();
+            // Register custom services
+            services.AddScoped<IJwtService,JwtService>();
+            services.AddScoped<IAuthService,AuthService>();
+
             services.AddScoped<IPaymentService, MobilemobPaymentService>();
-            
-            // Add health checks
+
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
+            services.AddScoped<IGenericService<BaseEntity, GeneralDto>, GenericService<BaseEntity, GeneralDto>>();
+            services.AddScoped<IOrderService, OrderService>();
+            services.AddScoped<ICategoryService, CategoryService>();
+            services.AddScoped<IProductService, ProductService>();
+            services.AddScoped<ICartService, CartService>();
+            // Health checks
             var mobilemobBaseUrl = configuration["Mobilemob:BaseUrl"] ?? "https://api.mobilemob.com/v1";
             services.AddHealthChecks()
-                .AddUrlGroup(new Uri(new Uri(mobilemobBaseUrl), "health"), 
+                .AddUrlGroup(
+                    uri: new Uri(new Uri(mobilemobBaseUrl), "health"),
                     name: "mobilemob-api",
-                    failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
+                    failureStatus: HealthStatus.Degraded,
                     tags: new[] { "payment", "external" });
-            
-            // Configure HTTP client for Mobilemob with Polly policies
+
+            // HTTP client with Polly
             services.AddHttpClient<IPaymentService, MobilemobPaymentService>(
                 client => ConfigureHttpClient(client, configuration))
-                .AddPolicyHandler(GetRetryPolicy())
-                .AddPolicyHandler(GetCircuitBreakerPolicy());
+                .AddPolicyHandler((sp, request) =>
+                {
+                    var logger = sp.GetRequiredService<ILogger<MobilemobPaymentService>>();
+                    return GetRetryPolicy(logger);
+                })
+                .AddPolicyHandler((sp, request) =>
+                {
+                    var logger = sp.GetRequiredService<ILogger<MobilemobPaymentService>>();
+                    return GetCircuitBreakerPolicy(logger);
+                });
 
-            // Configure JWT Authentication
+            // JWT Authentication
             var jwtSettings = configuration.GetSection("JwtSettings");
             var key = Encoding.ASCII.GetBytes(jwtSettings["Secret"]!);
 
@@ -118,69 +138,62 @@ namespace Infrastructure
                 };
             });
 
+            return services;
         }
-        
+
         private static void ConfigureHttpClient(HttpClient client, IConfiguration configuration)
         {
             var baseUrl = configuration["Mobilemob:BaseUrl"] ?? "https://api.mobilemob.com/v1";
             var apiKey = configuration["Mobilemob:ApiKey"];
-            
+
             client.BaseAddress = new Uri(baseUrl);
-            client.Timeout = TimeSpan.FromSeconds(30); // Set a reasonable timeout
+            client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         }
-        
-        private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+
+        private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy(ILogger logger)
         {
-            // Retry with exponential backoff for transient failures
             return HttpPolicyExtensions
                 .HandleTransientHttpError()
-                .OrResult(msg => (int)msg.StatusCode == 429) // Too Many Requests
+                .OrResult(msg => (int)msg.StatusCode == 429)
                 .WaitAndRetryAsync(
                     retryCount: 3,
-                    sleepDurationProvider: retryAttempt => 
-                        TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)) + 
+                    sleepDurationProvider: retryAttempt =>
+                        TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)) +
                         TimeSpan.FromMilliseconds(new Random().Next(0, 100)),
                     onRetry: (outcome, delay, retryAttempt, context) =>
                     {
-                        // Log retry attempts
-                        var logger = context.GetLogger();
-                        logger?.LogWarning(
+                        logger.LogWarning(
                             "Delaying for {delay}ms, then making retry {retryAttempt} for {requestUri}.",
-                            delay.TotalMilliseconds, 
-                            retryAttempt, 
+                            delay.TotalMilliseconds,
+                            retryAttempt,
                             outcome.Result?.RequestMessage?.RequestUri);
                     });
         }
-        
-        private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+
+        private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy(ILogger logger)
         {
-            // Break the circuit after 5 failed attempts
             return HttpPolicyExtensions
                 .HandleTransientHttpError()
                 .CircuitBreakerAsync(
                     handledEventsAllowedBeforeBreaking: 5,
                     durationOfBreak: TimeSpan.FromSeconds(30),
-                    onBreak: (outcome, breakDelay, context) =>
+                    onBreak: (outcome, breakDelay) =>
                     {
-                        var logger = context.GetLogger();
-                        logger?.LogError(
+                        logger.LogError(
                             "Circuit breaker opened for {breakDelay}ms due to: {ExceptionMessage}",
                             breakDelay.TotalMilliseconds,
                             outcome.Exception?.Message ?? outcome.Result?.ToString());
                     },
-                    onReset: context =>
+                    onReset: () =>
                     {
-                        var logger = context.GetLogger();
-                        logger?.LogInformation("Circuit breaker reset");
+                        logger.LogInformation("Circuit breaker reset");
                     },
                     onHalfOpen: () =>
                     {
-                        // Log when circuit is in half-open state
-                        return Task.CompletedTask;
+                        logger.LogInformation("Circuit breaker is half-open");
                     });
-        }
         }
     }
 }

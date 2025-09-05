@@ -27,5 +27,11 @@ namespace Application.DTOs.Auth
 
         [Phone(ErrorMessage = "Invalid phone number")]
         public string PhoneNumber { get; set; }
+        [Required(ErrorMessage = "Email is required")]
+        public string Address { get; set; }
+        [Required(ErrorMessage = "Email is required")]
+        public string City { get; set; }
+        public string? Country { get; set; } = "Egypt";
+        public string? PostalCode { get; set; }
     }
 }

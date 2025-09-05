@@ -18,7 +18,8 @@ namespace Application.DTOs.Orders
         Processing,
         Shipped,
         Delivered,
-        Cancelled
+        Cancelled,
+        Refunded
     }
 
     public enum PaymentStatus

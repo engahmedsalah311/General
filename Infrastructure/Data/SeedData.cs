@@ -42,7 +42,12 @@ namespace Infrastructure.Data
                     Email = adminEmail,
                     FirstName = "Admin",
                     LastName = "User",
-                    EmailConfirmed = true
+                    EmailConfirmed = true,
+                    Address = "Mansora",
+                    City = "Dakahlia",
+                    Country = "Egypt",
+                    PostalCode = "11111"
+                    
                 };
 
                 var createAdmin = await userManager.CreateAsync(admin, "Admin@123");
@@ -70,8 +75,8 @@ namespace Infrastructure.Data
                 // Seed sample products if no products exist
                 if (!context.Products.Any())
                 {
-                    var electronicsId = categories.First(c => c.Name == "Electronics").Id;
-                    var booksId = categories.First(c => c.Name == "Books").Id;
+                    var electronicsId = context.Categories.First(c => c.Name == "Electronics").Id;
+                    var booksId = context.Categories.First(c => c.Name == "Books").Id;
 
                     var products = new[]
                     {

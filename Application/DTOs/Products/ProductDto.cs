@@ -12,7 +12,7 @@ namespace Application.DTOs.Products
         public int StockQuantity { get; set; }
         public bool IsActive { get; set; }
         public bool IsBestSeller { get; set; }
-        public int CategoryId { get; set; }
+        public int? CategoryId { get; set; }
         public string CategoryName { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? LastUpdated { get; set; }
