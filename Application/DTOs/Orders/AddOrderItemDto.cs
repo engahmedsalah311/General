@@ -10,5 +10,7 @@ namespace Application.DTOs.Orders
         [Required]
         [Range(1, int.MaxValue, ErrorMessage = "Quantity must be at least 1")]
         public int Quantity { get; set; }
+        [Required]
+        public int ProductColourId { get; set; }
     }
 }

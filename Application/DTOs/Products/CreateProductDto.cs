@@ -15,16 +15,25 @@ namespace Application.DTOs.Products
         [Range(0.01, double.MaxValue, ErrorMessage = "Price must be greater than 0")]
         public decimal Price { get; set; }
 
-        [Url]
+        //[Url]
         public string ImageUrl { get; set; }
 
         [Range(0, int.MaxValue)]
         public int StockQuantity { get; set; }
 
         public bool IsActive { get; set; } = true;
-        public bool IsBestSeller { get; set; }
+        public bool IsBestSeller { get; set; } = false;
         
         [Required]
         public int CategoryId { get; set; }
+
+        public List<CreateProductColourDto> Colours { get; set; }
+        public int Id { get; set; }
+    }
+
+    public class CreateProductColourDto
+    {
+        public int ColourId { get; set; }
+        public int Quantity { get; set; }
     }
 }

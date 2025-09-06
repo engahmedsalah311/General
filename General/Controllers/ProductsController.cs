@@ -78,9 +78,9 @@ namespace General.Controllers
         /// </summary>
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ProductDto))]
+        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(CreateProductDto))]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> CreateProduct([FromBody] ProductDto productDto)
+        public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto productDto)
         {
             if (!ModelState.IsValid)
             {
@@ -107,7 +107,7 @@ namespace General.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> UpdateProduct(int id, [FromBody] ProductDto productDto)
+        public async Task<IActionResult> UpdateProduct(int id, [FromBody] CreateProductDto productDto)
         {
             if (id != productDto.Id)
             {
@@ -126,7 +126,7 @@ namespace General.Controllers
                 {
                     return NotFound();
                 }
-                return NoContent();
+                return Ok(productDto);
             }
             catch (Exception ex)
             {
@@ -157,25 +157,6 @@ namespace General.Controllers
             {
                 _logger.LogError(ex, $"Error deleting product with ID {id}");
                 return StatusCode(500, "An error occurred while deleting the product");
-            }
-        }
-
-        /// <summary>
-        /// Get products by category
-        /// </summary>
-        [HttpGet("category/{category}")]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ProductDto>))]
-        public async Task<IActionResult> GetProductsByCategory(string category)
-        {
-            try
-            {
-                var products = await _productService.GetProductsByCategoryAsync(category);
-                return Ok(products);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error retrieving products for category {category}");
-                return StatusCode(500, "An error occurred while retrieving products by category");
             }
         }
     }

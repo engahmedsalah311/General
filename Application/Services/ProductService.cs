@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using Application.DTOs.ProductColours;
 using Application.DTOs.Products;
 using Application.Interfaces;
 using Domain.Entities;
@@ -20,31 +21,6 @@ namespace Application.Services
         {
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
-
-        public async Task<IEnumerable<ProductDto>> GetAllAsync()
-        {
-            try
-            {
-                var includes = new List<Expression<Func<Product, object>>> 
-                { 
-                    p => p.Category 
-                };
-                
-                // Use FindByIncMappedAsync to get all products with category included
-                var products = await _unitOfWork.Repository<Product>()
-                    .FindByIncMappedAsync<ProductDto>(
-                        filters: null,
-                        includes: includes
-                    );
-
-                return products;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving all products");
-                throw;
-            }
         }
 
         public async Task<ProductDto> GetByIdAsync(int id)
@@ -94,10 +70,15 @@ namespace Application.Services
             }
         }
 
-        public async Task<ProductDto> AddAsync(ProductDto productDto)
+        public async Task<ProductDto> AddAsync(CreateProductDto productDto)
         {
             try
             {
+                var validColourIds = await _unitOfWork.Repository<Colour>()
+                                                      .GetAllAsQueryable()
+                                                      .Where(c => productDto.Colours.Select(pc => pc.ColourId).Contains(c.Id))
+                                                      .Select(c => c.Id)
+                                                      .ToListAsync();
                 var product = new Product
                 {
                     Name = productDto.Name,
@@ -107,7 +88,16 @@ namespace Application.Services
                     StockQuantity = productDto.StockQuantity,
                     CategoryId = productDto.CategoryId,
                     IsActive = productDto.IsActive,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    IsBestSeller = productDto.IsBestSeller,
+                    ProductColours = productDto.Colours
+                    .Where(pc => validColourIds.Contains(pc.ColourId))
+                    .Select(pc => new ProductColours
+                    {
+                        ColourId = pc.ColourId,
+                        Quantity = pc.Quantity
+                    })
+                    .ToList()
                 };
 
                 await _unitOfWork.Repository<Product>().AddAsync(product);
@@ -122,19 +112,19 @@ namespace Application.Services
                 throw;
             }
         }
-
-        public async Task<bool> UpdateAsync(int id, ProductDto productDto)
+        public async Task<bool> UpdateAsync(int id, CreateProductDto productDto)
         {
             try
             {
-                // Get the existing product
-                var product = await _unitOfWork.Repository<Product>().GetByIdAsync(id);
-                if (product == null)
-                {
-                    return false;
-                }
+                var product = await _unitOfWork.Repository<Product>()
+                    .GetAllAsQueryable()
+                    .Include(p => p.ProductColours)
+                    .FirstOrDefaultAsync(p => p.Id == id);
 
-                // Update product properties
+                if (product == null)
+                    return false;
+
+                // --- Update Product fields ---
                 product.Name = productDto.Name ?? product.Name;
                 product.Description = productDto.Description ?? product.Description;
                 product.Price = productDto.Price;
@@ -143,8 +133,46 @@ namespace Application.Services
                 product.CategoryId = productDto.CategoryId;
                 product.IsActive = productDto.IsActive;
                 product.UpdatedAt = DateTime.UtcNow;
+                product.IsBestSeller = productDto.IsBestSeller;
 
-                // Update the product using repository
+                // --- Sync Colours + Quantities ---
+                var oldColours = product.ProductColours.ToList();
+                var newColours = productDto.Colours ?? new List<CreateProductColourDto>();
+
+                var newColourIds = newColours.Select(c => c.ColourId).ToList();
+
+                // 1. Add or update colours
+                foreach (var newColour in newColours)
+                {
+                    var existing = oldColours.FirstOrDefault(pc => pc.ColourId == newColour.ColourId);
+                    if (existing == null)
+                    {
+                        // Add new colour
+                        product.ProductColours.Add(new ProductColours
+                        {
+                            ProductId = product.Id,
+                            ColourId = newColour.ColourId,
+                            Quantity = newColour.Quantity
+                        });
+                    }
+                    else
+                    {
+                        // Update quantity if changed
+                        if (existing.Quantity != newColour.Quantity)
+                        {
+                            existing.Quantity = newColour.Quantity;
+                        }
+                    }
+                }
+
+                // 2. Remove deleted colours
+                var toRemove = oldColours.Where(pc => !newColourIds.Contains(pc.ColourId)).ToList();
+                foreach (var item in toRemove)
+                {
+                    product.ProductColours.Remove(item);
+                    _unitOfWork.Repository<ProductColours>().Delete(item);
+                }
+
                 _unitOfWork.Repository<Product>().Update(product);
                 await _unitOfWork.CommitAsync();
 
@@ -156,7 +184,6 @@ namespace Application.Services
                 throw;
             }
         }
-
         public async Task<bool> DeleteAsync(int id)
         {
             try
@@ -184,154 +211,6 @@ namespace Application.Services
                 throw;
             }
         }
-
-        public async Task<IEnumerable<ProductDto>> GetActiveProductsAsync()
-        {
-            try
-            {
-                var includes = new List<Expression<Func<Product, object>>> 
-                { 
-                    p => p.Category 
-                };
-                
-                var filters = new List<Expression<Func<Product, bool>>> 
-                { 
-                    p => p.IsActive 
-                };
-                
-                var products = await _unitOfWork.Repository<Product>()
-                    .FindByIncMappedAsync<ProductDto>(
-                        filters: filters,
-                        includes: includes
-                    );
-
-                return products;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving active products");
-                throw;
-            }
-        }
-
-        public async Task<IEnumerable<ProductDto>> GetProductsByCategoryAsync(string category)
-        {
-            try
-            {
-                var includes = new List<Expression<Func<Product, object>>> 
-                { 
-                    p => p.Category 
-                };
-                
-                var filters = new List<Expression<Func<Product, bool>>> 
-                { 
-                    p => p.IsActive && 
-                         p.Category != null && 
-                         p.Category.Name.ToLower() == category.ToLower()
-                };
-                
-                var products = await _unitOfWork.Repository<Product>()
-                    .FindByIncMappedAsync<ProductDto>(
-                        filters: filters,
-                        includes: includes
-                    );
-
-                return products;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving products for category {Category}", category);
-                throw;
-            }
-        }
-
-        public async Task<IEnumerable<ProductDto>> GetProductsInPriceRangeAsync(decimal minPrice, decimal maxPrice)
-        {
-            try
-            {
-                var includes = new List<Expression<Func<Product, object>>> 
-                { 
-                    p => p.Category 
-                };
-                
-                var filters = new List<Expression<Func<Product, bool>>> 
-                { 
-                    p => p.IsActive && 
-                         p.Price >= minPrice && 
-                         p.Price <= maxPrice
-                };
-                
-                var products = await _unitOfWork.Repository<Product>()
-                    .FindByIncMappedAsync<ProductDto>(
-                        filters: filters,
-                        includes: includes
-                    );
-
-                return products;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving products in price range {MinPrice} to {MaxPrice}", minPrice, maxPrice);
-                throw;
-            }
-        }
-
-        public async Task<IEnumerable<ProductDto>> GetPagedItemAsync(int pageNumber = 1, int pageSize = 10)
-        {
-            try
-            {
-                var includes = new List<Expression<Func<Product, object>>> 
-                { 
-                    p => p.Category 
-                };
-                
-                var filters = new List<Expression<Func<Product, bool>>> 
-                { 
-                    p => p.IsActive 
-                };
-                
-                var result = await _unitOfWork.Repository<Product>()
-                    .GetPagedMappedAsync<ProductDto>(
-                        page: pageNumber,
-                        pageSize: pageSize,
-                        filters: filters,
-                        includes: includes
-                    );
-
-                return result.Data;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving paged products");
-                throw;
-            }
-        }
-
-        //public async Task<IEnumerable<ProductDto>> GetPagedItemAsync(Expression<Func<ProductDto, bool>> predicate, int pageNumber = 1, int pageSize = 10)
-        //{
-        //    try
-        //    {
-        //        var allProducts = await _unitOfWork.Repository<Product>()
-        //            .GetAll()
-        //            .Include(p => p.Category)
-        //            .Where(p => p.IsActive)
-        //            .Select(p => MapToDto(p))
-        //            .ToListAsync();
-
-        //        return allProducts
-        //            .AsQueryable()
-        //            .Where(predicate)
-        //            .Skip((pageNumber - 1) * pageSize)
-        //            .Take(pageSize)
-        //            .ToList();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, "Error retrieving filtered paged products");
-        //        throw;
-        //    }
-        //}
-
         public async Task<ProductListDto> GetFilteredProductsAsync(ProductFilterDto filter)
         {
             try
@@ -376,25 +255,6 @@ namespace Application.Services
                     filters.Add(p => p.StockQuantity > 0);
                 }
 
-                // Apply sorting
-                //var sortOrder = filter.SortOrder?.ToLower() ?? "";
-                //var orderBy = sortOrder switch
-                //{
-                //    "price_asc" => (Expression<Func<Product, object>>)(p => p.Price),
-                //    "price_desc" => (Expression<Func<Product, object>>)(p => p.Price),
-                //    "name_asc" => p => p.Name,
-                //    "name_desc" => (Expression<Func<Product, object>>)(p => p.Name),
-                //    "newest" => (Expression<Func<Product, object>>)(p => p.CreatedAt),
-                //    _ => p => p.Name
-                //};
-
-                //var isDescending = sortOrder switch
-                //{
-                //    "price_desc" => true,
-                //    "name_desc" => true,
-                //    _ => false
-                //};
-
                 // Use the repository's search functionality
                 var result = await _unitOfWork.Repository<Product>()
                     .SearchPagedMappedAsync<ProductDto, ProductFilterDto>(
@@ -418,24 +278,6 @@ namespace Application.Services
             }
         }
 
-        private ProductDto MapToDto(Product product)
-        {
-            if (product == null)
-                return null;
-
-            return new ProductDto
-            {
-                Id = product.Id,
-                Name = product.Name,
-                Description = product.Description,
-                Price = product.Price,
-                StockQuantity = product.StockQuantity,
-                CategoryId = product.CategoryId,
-                CategoryName = product.Category?.Name,
-                IsActive = product.IsActive,
-                CreatedAt = product.CreatedAt.Value,
-                LastUpdated = product.UpdatedAt
-            };
-        }
+        
     }
 }

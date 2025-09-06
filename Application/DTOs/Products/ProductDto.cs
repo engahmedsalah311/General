@@ -1,3 +1,4 @@
+using Application.DTOs.ProductColours;
 using System;
 
 namespace Application.DTOs.Products
@@ -16,5 +17,7 @@ namespace Application.DTOs.Products
         public string CategoryName { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? LastUpdated { get; set; }
+        public List<ProductColoursDto>? ProductColours { get; set; }
     }
+
 }

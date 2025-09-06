@@ -26,5 +26,7 @@ namespace Domain.Entities
         // Additional properties
         public bool IsBestSeller { get; set; }
         public DateTime? LastUpdated { get; set; } = DateTime.UtcNow;
+
+        public virtual ICollection<ProductColours>? ProductColours { get; set; }
     }
 }

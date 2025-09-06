@@ -79,5 +79,8 @@ namespace Domain.Entities
         
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalPrice => UnitPrice * Quantity;
+        public int ProductColourId { get; set; }   
+        public virtual ProductColours ProductColour { get; set; }
+
     }
 }

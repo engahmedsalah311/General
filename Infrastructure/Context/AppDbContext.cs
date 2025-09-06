@@ -21,6 +21,8 @@ namespace Infrastructure.Context
         public DbSet<CartItem> CartItems { get; set; }
         public DbSet<Order> Orders { get; set; }
         public DbSet<OrderItem> OrderItems { get; set; }
+        public DbSet<Colour> Colours { get; set; }
+        public DbSet<ProductColours> ProductColours { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

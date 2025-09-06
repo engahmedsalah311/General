@@ -1,6 +1,8 @@
+using Application.Parameters;
+
 namespace Application.DTOs.Products
 {
-    public class ProductFilterDto
+    public class ProductFilterDto: PagingParameters
     {
         public string SearchTerm { get; set; } = string.Empty;
         public decimal? MinPrice { get; set; }
@@ -11,7 +13,5 @@ namespace Application.DTOs.Products
         public bool? InStock { get; set; }
         public string SortBy { get; set; } = "newest";
         public bool SortDescending { get; set; } = true;
-        public int PageNumber { get; set; } = 1;
-        public int PageSize { get; set; } = 10;
     }
 }
