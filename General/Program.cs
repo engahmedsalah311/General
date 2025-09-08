@@ -102,43 +102,22 @@ public class Startup
         var jwtSettings = Configuration.GetSection("JwtSettings");
         var key = Encoding.ASCII.GetBytes(jwtSettings["Secret"]!);
 
-        //services.AddAuthentication(options =>
-        //{
-        //    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        //    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        //})
-        //.AddJwtBearer(options =>
-        //{
-        //    options.RequireHttpsMetadata = false;
-        //    options.SaveToken = true;
-        //    options.TokenValidationParameters = new TokenValidationParameters
-        //    {
-        //        ValidateIssuerSigningKey = true,
-        //        IssuerSigningKey = new SymmetricSecurityKey(key),
-        //        ValidateIssuer = false,
-        //        ValidateAudience = false,
-        //        ValidateLifetime = true,
-        //        ClockSkew = TimeSpan.Zero
-        //    };
-        //});
-
         // Configure Swagger
         services.AddSwaggerGen(c =>
         {
             c.SwaggerDoc("v1", new OpenApiInfo { Title = "E-Commerce API", Version = "v1" });
-            
+
             // Add JWT Authentication to Swagger
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
-                Description = "JWT Authorization header using the Bearer scheme.\r\n\r\n" +
-                             "Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\n" +
-                             "Example: 'Bearer 12345abcdef'",
+                Description = "JWT Authorization header using the Bearer scheme. \r\n\r\n" +
+                              "Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\n" +
+                              "Example: 'Bearer 12345abcdef'",
                 Name = "Authorization",
                 In = ParameterLocation.Header,
-                Type = SecuritySchemeType.ApiKey,
+                Type = SecuritySchemeType.Http,
                 Scheme = "Bearer"
             });
-
             c.AddSecurityRequirement(new OpenApiSecurityRequirement()
             {
                 {
@@ -149,7 +128,7 @@ public class Startup
                             Type = ReferenceType.SecurityScheme,
                             Id = "Bearer"
                         },
-                        Scheme = "oauth2",
+                        Scheme = "Authorization",
                         Name = "Bearer",
                         In = ParameterLocation.Header,
                     },
