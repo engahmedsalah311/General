@@ -19,6 +19,7 @@ using Application.Services;
 using Application.Interfaces;
 using Infrastructure.Repositories;
 using Application.DTOs;
+using Application;
 
 public class Program
 {
@@ -136,6 +137,9 @@ public class Startup
                 }
             });
         });
+
+        services.Configure<PaymobOptions>(
+            Configuration.GetSection("PaymobOptions"));
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)

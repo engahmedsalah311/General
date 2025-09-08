@@ -1,22 +1,29 @@
+using Application.DTOs.Payments;
+using Application.Interfaces;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Application.Interfaces;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using Application.DTOs.Payments;
+using static System.Net.WebRequestMethods;
+using System.Net.Http.Json;
+using System.Text.Json;
 
-namespace Infrastructure.Services
+
+namespace Application.Services
 {
     public class MobilemobPaymentService : IPaymentService
     {
         private readonly HttpClient _httpClient;
         private readonly ILogger<MobilemobPaymentService> _logger;
+        private readonly IHttpClientFactory _http;
+        private readonly PaymobOptions _opt;
+
         private readonly string _apiKey;
         private readonly string _baseUrl;
 
@@ -45,6 +52,63 @@ namespace Infrastructure.Services
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         }
 
+        public async Task<string> GetAuthTokenAsync()
+        {
+            var client = _http.CreateClient("paymob");
+            var resp = await client.PostAsJsonAsync("api/auth/tokens", new { api_key = _opt.ApiKey });
+            resp.EnsureSuccessStatusCode();
+            using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+            return doc.RootElement.GetProperty("token").GetString()!;
+        }
+
+        public async Task<int> CreateOrderAsync(string authToken, long amountCents, string merchantOrderId)
+        {
+            var client = _http.CreateClient("paymob");
+            var payload = new
+            {
+                auth_token = authToken,
+                delivery_needed = "false",
+                amount_cents = amountCents,
+                currency = "EGP",
+                merchant_order_id = merchantOrderId,
+                items = new object[] { }
+            };
+            var resp = await client.PostAsJsonAsync("api/ecommerce/orders", payload);
+            resp.EnsureSuccessStatusCode();
+            using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+            return doc.RootElement.GetProperty("id").GetInt32();
+        }
+        public async Task<string> GetPaymentKeyAsync(ProcessPaymentDto paymentDto, int orderId)
+        {
+            var client = _http.CreateClient("paymob");
+            var payload = new
+            {
+                auth_token = paymentDto.Auth_Token,
+                amount_cents = paymentDto.Amount_Cents,
+                expiration = 3600,
+                order_id = orderId,
+                billing_data = new
+                {
+                    email = paymentDto.email,
+                    phone_number = paymentDto.phone_number,
+                    first_name = paymentDto.first_name,
+                    last_name = paymentDto.last_name
+                },
+                currency = paymentDto.Currency,
+                integration_id = _opt.IntegrationId
+            };
+            var resp = await client.PostAsJsonAsync("api/acceptance/payment_keys", payload);
+            resp.EnsureSuccessStatusCode();
+            using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+            return doc.RootElement.GetProperty("token").GetString()!;
+        }
+        public string BuildIframeUrl(string paymentToken)
+        {
+            return $"https://accept.paymob.com/api/acceptance/iframes/{_opt.IframeId}?payment_token={Uri.EscapeDataString(paymentToken)}";
+        }
+
+
+
         public async Task<PaymentResultDto> ProcessPaymentAsync(ProcessPaymentDto paymentDto)
         {
             // Input validation
@@ -52,59 +116,55 @@ namespace Infrastructure.Services
             {
                 throw new ArgumentNullException(nameof(paymentDto));
             }
+            paymentDto.Auth_Token = await GetAuthTokenAsync();
             
-            if (string.IsNullOrWhiteSpace(paymentDto.PaymentDetails))
+            if (string.IsNullOrWhiteSpace(paymentDto.Auth_Token))
             {
-                throw new ArgumentException("Payment token is required", nameof(paymentDto.PaymentDetails));
+                throw new ArgumentException("Payment token is required", nameof(paymentDto.Auth_Token));
             }
-            
-            if (paymentDto.Amount <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(paymentDto.Amount), "Amount must be greater than zero");
-            }
-            
+                        
             if (string.IsNullOrWhiteSpace(paymentDto.Currency))
             {
                 paymentDto.Currency = "EGP"; // Default to EGP if not specified
             }
             
             _logger.LogInformation("Processing payment of {Amount} {Currency} with token: {Token}", 
-                paymentDto.Amount, paymentDto.Currency, MaskSensitiveData(paymentDto.PaymentDetails));
+                paymentDto.Amount_Cents, paymentDto.Currency, MaskSensitiveData(paymentDto.Auth_Token));
                 
             try
             {
-                var request = new
-                {
-                    token = paymentDto.PaymentDetails,
-                    amount = (int)(paymentDto.Amount * 100), // Convert to smallest currency unit (e.g., piastres)
-                    currency = paymentDto.Currency,
-                    description = paymentDto.PaymentDetails ?? "E-commerce purchase"
-                };
+                int orderId = await CreateOrderAsync(paymentDto.Auth_Token, paymentDto.Amount_Cents, paymentDto.Merchant_Order_Id);
 
-                var response = await _httpClient.PostAsJsonAsync("payments/charge", request);
-                var content = await response.Content.ReadAsStringAsync();
-                
-                if (!response.IsSuccessStatusCode)
+                if (orderId == 0)
                 {
-                    _logger.LogError($"Mobilemob payment failed: {response.StatusCode} - {content}");
+                    _logger.LogError($"Mobilemob payment failed in CreateOrderAcync");
                     return new PaymentResultDto
                     {
                         Success = false,
-                        Message = $"Payment failed: {response.ReasonPhrase}",
+                        Message = $"Mobilemob payment failed in CreateOrderAcync",
                         TransactionId = null
                     };
                 }
-
-                var result = JsonSerializer.Deserialize<MobilemobPaymentResponse>(content, new JsonSerializerOptions
+                else
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    var PaymentKey = await GetPaymentKeyAsync(paymentDto, orderId);
+                    if(string.IsNullOrEmpty(PaymentKey))
+                    {
+                        var IframeUrl = BuildIframeUrl(PaymentKey);
+                        return new PaymentResultDto
+                        {
+                            Success = true,
+                            Message = $"First step succeded",
+                            TransactionId = PaymentKey
+                        };
+                    }
+                }
 
                 return new PaymentResultDto
                 {
-                    Success = result.Success,
-                    TransactionId = result.TransactionId,
-                    Message = result.Success ? "Payment status retrieved successfully" : result.Message
+                    Success = false,
+                    TransactionId = "",
+                    Message = "Payment status retrieved failed"
                 };
             }
             catch (Exception ex)

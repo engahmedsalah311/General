@@ -4,17 +4,15 @@ namespace Application.DTOs.Payments
 {
     public class ProcessPaymentDto
     {
-        [Required]
-        public int OrderId { get; set; }
-        
-        [Required]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Amount must be greater than 0")]
-        public decimal Amount { get; set; }
-        
-        [Required]
-        public string PaymentMethod { get; set; }
-        
-        public string PaymentDetails { get; set; }
-        public string? Currency { get; set; }
+        public string Auth_Token { get; set; }     // auth_token
+        public bool Delivery_Needed { get; set; } // "false"
+        public long Amount_Cents { get; set; }    // amount_cents
+        public string Currency { get; set; }        // "EGP"
+        public string Merchant_Order_Id { get; set; } // merchant_order_id
+        public string email { get; set; } // merchant_order_id
+        public string phone_number { get; set; } // merchant_order_id
+        public string first_name { get; set; } // merchant_order_id
+        public string last_name { get; set; } // merchant_order_id
+
     }
 }

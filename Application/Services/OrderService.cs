@@ -206,7 +206,7 @@ namespace Application.Services
                 throw;
             }
         }
-        public async Task<OrderDto> CreateOrderAsync(CreateOrderDto createOrderDto, string userId)
+        public async Task<string> CreateOrderAsync(CreateOrderDto createOrderDto, string userId)
         {
             await _unitOfWork.BeginTransaction();
             var productRepo = _unitOfWork.Repository<Product>();
@@ -298,14 +298,21 @@ namespace Application.Services
                 await _unitOfWork.SaveChangesAsync();
 
                 // Process payment if not Cash
+                var paymentResult = new PaymentResultDto();
                 if (createOrderDto.PaymentMethod != DTOs.Orders.PaymentMethod.CashOnDelivery)
                 {
-                    var paymentResult = await _paymentService.ProcessPaymentAsync(new ProcessPaymentDto
+                    paymentResult = await _paymentService.ProcessPaymentAsync(new ProcessPaymentDto
                     {
-                        OrderId = order.Id,
-                        Amount = order.TotalAmount,
-                        PaymentMethod = createOrderDto.PaymentMethod.ToString(),
-                        PaymentDetails = createOrderDto.PaymentToken ?? createOrderDto.PaymentMethod.ToString()
+                        Merchant_Order_Id = order.OrderNumber,
+                        Amount_Cents = ConvertToCents(order.TotalAmount),
+                        Auth_Token = "",
+                        Currency = "EGP",
+                        Delivery_Needed = false,
+                        email = user.Email,
+                        first_name = user.FirstName,
+                        last_name = user.LastName,
+                        phone_number = user.PhoneNumber
+                        
                     });
 
                     if (!paymentResult.Success)
@@ -315,7 +322,7 @@ namespace Application.Services
                     }
 
                     // Payment succeeded → set Paid
-                    order.PaymentStatus = (Domain.Entities.PaymentStatus)DomainEnums.PaymentStatus.Paid;
+                    order.PaymentStatus = (Domain.Entities.PaymentStatus)DomainEnums.PaymentStatus.Pending;
                 }
 
                 // Update order status
@@ -324,8 +331,8 @@ namespace Application.Services
 
                 _unitOfWork.Repository<Order>().Update(order);
                 await _unitOfWork.CommitAsync();
-
-                return await GetOrderByIdAsync(order.Id, userId, false);
+                if (createOrderDto.PaymentMethod != DTOs.Orders.PaymentMethod.CashOnDelivery) return paymentResult.IFrameUrl;
+                else return "Succeed";
             }
             catch (Exception ex)
             {
@@ -333,6 +340,13 @@ namespace Application.Services
                 await _unitOfWork.Rollback();
                 throw;
             }
+        }
+
+        public static long ConvertToCents(decimal amount)
+        {
+            // Multiply by 100 and convert to integer (no decimals)
+            long amountInCents = (long)(amount * 100);
+            return amountInCents;
         }
         private async Task ReturnOrderItemsToStockAsync(Order order)
         {
@@ -677,8 +691,8 @@ namespace Application.Services
                 // Process payment
                 var paymentResult = await _paymentService.ProcessPaymentAsync(new ProcessPaymentDto
                 {
-                    OrderId = order.Id,
-                    Amount = order.TotalAmount,
+                    merchant_order_id = order.Id,
+                    amount_cents = order.TotalAmount,
                     PaymentMethod = order.PaymentMethod.ToString(),
                     PaymentDetails = order.TransactionId ?? order.PaymentMethod.ToString()
                 });
