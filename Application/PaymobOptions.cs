@@ -14,5 +14,6 @@ namespace Application
         public int IframeId { get; set; }           // Iframe للبطاقة
         public string BaseUrl { get; set; }         // "https://accept.paymob.com"
         public string CallbackUrl { get; set; }     // الرابط اللي Paymob هيبعتله الـ Webhook
+        public string  HmacSecret { get; set; } = "";
     }
 }

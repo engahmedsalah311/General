@@ -140,6 +140,11 @@ public class Startup
 
         services.Configure<PaymobOptions>(
             Configuration.GetSection("PaymobOptions"));
+
+        services.AddHttpClient("paymob", c => {
+            c.BaseAddress = new Uri("https://accept.paymob.com/");
+            c.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        });
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
